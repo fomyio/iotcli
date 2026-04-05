@@ -1,0 +1,31 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+.venv/
+.env
+.env.*
+*.enc
+.key
+.pytest_cache/
+.ruff_cache/
+.DS_Store
+
+# IDE / tools
+.claude/
+.vscode/
+.idea/
+
+# Archived v1
+_v1_archive/
+
+# Local config (contains device setup / credentials)
+devices.yaml
+credentials/
+*.bak
+
+# System
+.Spotlight-V100
+.Trashes
+Thumbs.db

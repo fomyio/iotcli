@@ -1,0 +1,72 @@
+---
+device: {{ device.name }}
+protocol: {{ device.protocol }}
+{% if device.profile %}
+profile: {{ device.profile }}
+{% endif %}
+---
+
+# {{ device.name }} — AI Agent Skill
+
+**Protocol:** {{ device.protocol }}
+{% if device.profile %}
+**Profile:** {{ device.profile }}
+{% endif %}
+**IP:** {{ device.ip }}:{{ device.port }}
+{% if meta.is_cloud %}
+**Connection:** Cloud (requires internet)
+{% else %}
+**Connection:** Local network
+{% endif %}
+
+## Available Commands
+
+### Check Status
+```bash
+iotcli --json control status "{{ device.name }}"
+```
+
+### Power Control
+```bash
+iotcli --json control on "{{ device.name }}"
+iotcli --json control off "{{ device.name }}"
+```
+
+{% if settable_properties %}
+### Set Properties
+{% for prop in settable_properties %}
+```bash
+iotcli --json control set "{{ device.name }}" "{{ prop }}=<value>"
+```
+{% endfor %}
+{% endif %}
+
+{% if actions %}
+### Custom Actions
+{% for action_name, action_desc in actions.items() %}
+- **{{ action_name }}**: {{ action_desc }}
+  ```bash
+  iotcli --json control set "{{ device.name }}" "{{ action_name }}=<value>"
+  ```
+{% endfor %}
+{% endif %}
+
+## Status Fields
+
+When you query this device's status, expect these fields in the JSON response:
+
+{% for field in status_fields %}
+- `{{ field }}`
+{% endfor %}
+
+## Rules
+
+- Always use `--json` for machine-readable output.
+- Check status before sending commands (the device may be offline).
+{% if meta.is_cloud %}
+- This is a cloud device — commands require internet connectivity.
+{% endif %}
+{% if device.protocol == "tuya" and device.profile == "petfeeder" %}
+- "on" triggers a quick feed (1 portion). Use `portions=N` for specific amounts (1-60).
+- There is no "off" state for a pet feeder.
+{% endif %}
