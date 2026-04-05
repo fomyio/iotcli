@@ -54,7 +54,7 @@ class DiscoveryLive:
 
         layout = Layout()
         layout.split_column(
-            Layout(Panel(self.progress, title="Scanning", border_style="blue"), size=8),
+            Layout(Panel(self.progress, title="[~] . .  Scanning", border_style="blue"), size=8),
             Layout(self._device_list(), minimum_size=3),
         )
         return layout

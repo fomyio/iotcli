@@ -17,6 +17,12 @@ from iotcli.tui.panels import DiscoveryLive
 console = Console()
 
 
+def _animated_select(title, choices, subtitle=""):
+    """Wrapper to use animated picker for all wizard selections."""
+    from iotcli.tui.interactive import animated_select
+    return animated_select(title, choices, subtitle)
+
+
 class SetupWizard:
     """Multi-step interactive wizard for configuring IoT devices."""
 
@@ -33,26 +39,33 @@ class SetupWizard:
 
     # -- entry point ----------------------------------------------------------
 
-    def run(self) -> None:
-        """Main wizard menu."""
-        prompts.header("iotcli Setup Wizard", "Configure your IoT devices")
-
-        action = prompts.select(
-            "What would you like to do?",
-            choices=[
-                {"name": "Discover devices on the network", "value": "discover"},
-                {"name": "Add a device manually", "value": "manual"},
-                {"name": "Reconfigure an existing device", "value": "reconfig"},
-                {"name": "Exit", "value": "exit"},
+    def run(self) -> str | None:
+        """Main wizard menu. Returns '__back__' if user cancels."""
+        action = _animated_select(
+            "iotcli Setup Wizard",
+            [
+                ("Discover devices on the network", "discover"),
+                ("Import devices from cloud", "cloud-import"),
+                ("Add a device manually", "manual"),
+                ("Reconfigure an existing device", "reconfig"),
             ],
+            subtitle="Configure your IoT devices",
         )
 
+        if action is None:
+            return "__back__"
         if action == "discover":
             self._discover_flow()
+        elif action == "cloud-import":
+            from iotcli.tui.welcome import _cloud_import_with_config
+            result = _cloud_import_with_config(self.config)
+            if result == "__back__":
+                return "__back__"
         elif action == "manual":
             self._manual_flow()
         elif action == "reconfig":
             self._reconfig_flow()
+        return None
 
     # -- discover flow --------------------------------------------------------
 
@@ -82,14 +95,16 @@ class SetupWizard:
         prompts.device_table(devices, title="Discovered Devices")
 
         # Let user pick which to configure
-        choices = [{"name": f"{d['name']} ({d['protocol']} @ {d['ip']})", "value": i}
-                   for i, d in enumerate(devices)]
-        choices.append({"name": "Configure all", "value": "all"})
-        choices.append({"name": "Skip", "value": "skip"})
+        choices = [
+            (f"{d['name']} ({d['protocol']} @ {d['ip']})", str(i))
+            for i, d in enumerate(devices)
+        ]
+        choices.append(("Configure all", "all"))
 
-        pick = prompts.select("Which device to configure?", choices=choices)
+        pick = _animated_select("Which device to configure?", choices,
+                                subtitle=f"Found {len(devices)} device(s)")
 
-        if pick == "skip":
+        if pick is None:
             return
         if pick == "all":
             for d in devices:
@@ -118,9 +133,7 @@ class SetupWizard:
         # Collect missing credentials
         creds: dict[str, str] = {}
         for field in raw.get("missing_info", []):
-            if field in ("token", "local_key", "pat_token", "access_token"):
-                val = prompts.secret(f"Enter {field}")
-            elif field in ("password",):
+            if field in ("token", "local_key", "pat_token", "access_token", "password"):
                 val = prompts.secret(f"Enter {field}")
             else:
                 val = prompts.text(f"Enter {field}")
@@ -146,17 +159,18 @@ class SetupWizard:
     # -- manual flow ----------------------------------------------------------
 
     def _manual_flow(self) -> None:
-        prompts.header("Manual Device Setup")
-
-        # Protocol selection with descriptions
+        # Protocol selection
         proto_names = protocol_registry.names()
         proto_choices = []
         for pn in proto_names:
             cls = protocol_registry.get(pn)
             desc = cls.meta.display_name if cls and hasattr(cls, "meta") else pn
-            proto_choices.append({"name": f"{pn}  —  {desc}", "value": pn})
+            proto_choices.append((f"{pn}  —  {desc}", pn))
 
-        protocol = prompts.select("Select protocol", choices=proto_choices)
+        protocol = _animated_select("Select protocol", proto_choices,
+                                    subtitle="Manual Device Setup")
+        if protocol is None:
+            return
 
         cls = protocol_registry.get_or_raise(protocol)
         meta = cls.meta
@@ -166,7 +180,7 @@ class SetupWizard:
             prompts.info("Setup guide:")
             console.print(f"  [dim]{meta.setup_guide}[/dim]\n")
 
-        # Basic info
+        # Basic info (text inputs stay as InquirerPy — need free-form input)
         name = self._require("Device name (unique)")
         ip = self._require("IP address", default="0.0.0.0" if meta.is_cloud else "")
         port = prompts.number("Port", default=meta.default_port)
@@ -185,14 +199,17 @@ class SetupWizard:
             device_dict["local_key"] = self._require_secret("Local Key")
             ver = prompts.text("Protocol version", default="3.4" if protocol == "petfeeder" else "3.3")
             device_dict["version"] = ver
-            # Profile selection for Tuya
             if protocol == "tuya":
                 from iotcli.protocols.tuya import TUYA_PROFILES
                 profile_choices = [
-                    {"name": f"{k}  —  {v().description}", "value": k}
+                    (f"{k}  —  {v().description}", k)
                     for k, v in TUYA_PROFILES.items()
                 ]
-                device_dict["profile"] = prompts.select("Device profile", choices=profile_choices)
+                profile = _animated_select("Device profile", profile_choices,
+                                           subtitle=f"Protocol: {protocol}")
+                if profile is None:
+                    return
+                device_dict["profile"] = profile
             else:
                 device_dict["profile"] = "petfeeder"
 
@@ -207,14 +224,17 @@ class SetupWizard:
                 device_dict["password"] = prompts.secret("Password")
 
         elif protocol == "http":
-            dt = prompts.select(
+            dt = _animated_select(
                 "Device type",
-                choices=[
-                    {"name": "ESPHome", "value": "esphome"},
-                    {"name": "Tasmota", "value": "tasmota"},
-                    {"name": "Generic HTTP", "value": "generic"},
+                [
+                    ("ESPHome", "esphome"),
+                    ("Tasmota", "tasmota"),
+                    ("Generic HTTP", "generic"),
                 ],
+                subtitle="Select the device firmware type",
             )
+            if dt is None:
+                return
             device_dict["device_type"] = dt
 
         elif protocol == "lgac":
@@ -232,8 +252,14 @@ class SetupWizard:
             prompts.warn("No devices configured yet.")
             return
 
-        prompts.header("Reconfigure Device")
-        name = prompts.select("Select device", choices=names)
+        name = _animated_select(
+            "Reconfigure Device",
+            [(n, n) for n in names],
+            subtitle="Select device to reconfigure",
+        )
+        if name is None:
+            return
+
         device = self.config.get_device(name)
 
         prompts.info(f"Protocol: {device.protocol} | IP: {device.ip}")
@@ -273,7 +299,6 @@ class SetupWizard:
         """Test connection — only save if it passes."""
         from iotcli.config.credentials import SENSITIVE_FIELDS
 
-        # Build credentials dict from the flat device_dict
         creds = {k: device_dict[k] for k in SENSITIVE_FIELDS if device_dict.get(k)}
 
         with console.status("[bold blue]Testing connection...", spinner="dots"):
@@ -285,10 +310,10 @@ class SetupWizard:
                 prompts.error(f"Connection error: {e}")
 
         if ok:
-            prompts.success("Connection successful!")
+            prompts.success("Connection successful!", with_mascot=True)
             self.config.add_device(device_dict)
             from iotcli.core.device import slugify
-            prompts.success(f"Device '{slugify(name)}' saved.")
+            prompts.success(f"Device '{slugify(name)}' saved.", with_mascot=True)
         else:
-            prompts.error("Connection failed — device was NOT saved.")
+            prompts.error("Connection failed — device was NOT saved.", with_mascot=True)
             prompts.info("Fix the credentials or network and try again.")

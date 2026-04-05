@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+
 import click
 
 from iotcli import __version__
@@ -17,7 +19,7 @@ from iotcli.cli.commands.config import config_show
 from iotcli.cli.commands.skills import skills
 
 
-@click.group()
+@click.group(invoke_without_command=True)
 @click.version_option(version=__version__, prog_name="iotcli")
 @click.option("--verbose", "-v", is_flag=True, help="Verbose output")
 @click.option("--debug", "-d", is_flag=True, help="Debug mode")
@@ -37,6 +39,23 @@ def cli(ctx, verbose, debug, json_output):
     ctx.obj["debug"] = debug
     ctx.obj["json_output"] = json_output
     ctx.obj["config"] = ConfigManager()
+
+    # Only act when no subcommand was given (bare `iotcli`)
+    if ctx.invoked_subcommand is not None:
+        return
+
+    if json_output:
+        # Machine-readable command list for AI agents
+        commands = sorted(cli.list_commands(ctx))
+        click.echo(json.dumps({
+            "version": __version__,
+            "commands": commands,
+        }, indent=2))
+        return
+
+    # Interactive welcome screen — loops until user picks Exit or Ctrl+C
+    from iotcli.tui.welcome import run_interactive
+    run_interactive(ctx)
 
 
 # Register commands

@@ -25,16 +25,45 @@ def header(title: str, subtitle: str = "") -> None:
     console.print(Panel(content, border_style="blue", expand=False))
 
 
-def success(msg: str) -> None:
-    console.print(f"  [green]>[/green] {msg}")
+def mascot_header(title: str, subtitle: str = "", mood=None) -> None:
+    """Print a section header with Homie mascot alongside."""
+    from iotcli.tui.mascot import MascotMood, render_side_by_side, fits_terminal
+
+    if mood is None:
+        mood = MascotMood.HAPPY
+
+    right_lines = [f"[bold cyan]{title}[/bold cyan]"]
+    if subtitle:
+        right_lines.append(f"[dim]{subtitle}[/dim]")
+
+    if fits_terminal(60):
+        content = render_side_by_side(mood, right_lines)
+    else:
+        content = Text(title, style="bold cyan")
+        if subtitle:
+            content.append(f"\n{subtitle}", style="dim")
+
+    console.print(Panel(content, border_style="blue", expand=False))
+
+
+def success(msg: str, with_mascot: bool = False) -> None:
+    if with_mascot:
+        from iotcli.tui.mascot import MascotMood, render_inline
+        console.print(render_inline(MascotMood.HAPPY, msg))
+    else:
+        console.print(f"  [green]>[/green] {msg}")
 
 
 def warn(msg: str) -> None:
     console.print(f"  [yellow]![/yellow] {msg}")
 
 
-def error(msg: str) -> None:
-    console.print(f"  [red]x[/red] {msg}")
+def error(msg: str, with_mascot: bool = False) -> None:
+    if with_mascot:
+        from iotcli.tui.mascot import MascotMood, render_inline
+        console.print(render_inline(MascotMood.ERROR, msg))
+    else:
+        console.print(f"  [red]x[/red] {msg}")
 
 
 def info(msg: str) -> None:
