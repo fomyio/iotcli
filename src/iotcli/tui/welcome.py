@@ -312,7 +312,7 @@ def _control_in_tui(ctx: click.Context) -> None:
                 lines = []
                 online = status.get("online", False)
                 icon = "●" if online else "○"
-                lines.append(f"  {device_name} — {'online' if online else 'offline'}")
+                lines.append(f"  {icon} {device_name} — {'online' if online else 'offline'}")
                 lines.append("")
                 for k, v in status.items():
                     if k in ("online", "dps"):
@@ -425,11 +425,17 @@ def _tuya_import(config: ConfigManager) -> str | None:
     console.print()
 
     # Get credentials
-    api_key = prompts.text("API Key (Access ID)")
+    try:
+        api_key = prompts.text("API Key (Access ID)")
+    except KeyboardInterrupt:
+        return "__back__"
     if not api_key:
         return "__back__"
 
-    api_secret = prompts.secret("API Secret (Access Secret)")
+    try:
+        api_secret = prompts.secret("API Secret (Access Secret)")
+    except KeyboardInterrupt:
+        return "__back__"
     if not api_secret:
         return "__back__"
 
@@ -558,10 +564,16 @@ def _xiaomi_import(config: ConfigManager) -> str | None:
     console.print()
 
     # Get credentials
-    username = prompts.text("Mi Home username (email/phone)")
+    try:
+        username = prompts.text("Mi Home username (email/phone)")
+    except KeyboardInterrupt:
+        return "__back__"
     if not username:
         return "__back__"
-    password = prompts.secret("Mi Home password")
+    try:
+        password = prompts.secret("Mi Home password")
+    except KeyboardInterrupt:
+        return "__back__"
     if not password:
         return "__back__"
 

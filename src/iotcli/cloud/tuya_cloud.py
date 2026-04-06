@@ -70,8 +70,7 @@ def fetch_devices(
 
         if isinstance(raw, dict) and raw.get("Error"):
             payload = raw.get("Payload", "")
-            err_code = raw.get("Err", "")
-            msg = f"Tuya API error: {payload or raw['Error']}"
+            msg = f"Tuya API error {raw.get('Err', '')}: {payload or raw['Error']}"
             # Add guidance for common error codes
             if "1106" in str(payload):
                 msg += (

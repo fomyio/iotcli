@@ -202,10 +202,9 @@ class XiaomiCloud:
         )
 
         # 4. Send email ticket
-        import time as _time
         r_send = self._session.post(
             "https://account.xiaomi.com/identity/auth/sendEmailTicket",
-            params={"_dc": str(int(_time.time() * 1000)), "sid": "xiaomiio",
+            params={"_dc": str(int(time.time() * 1000)), "sid": "xiaomiio",
                     "context": context, "mask": "0", "_locale": "en_US"},
             data={"retry": "0", "icode": "", "_json": "true",
                   "ick": self._session.cookies.get("ick", "")},
@@ -496,13 +495,16 @@ def fetch_devices(
     regions = list(XIAOMI_REGIONS.keys()) if scan_all_regions else [region]
 
     all_raw: list[dict] = []
+    last_err: str | None = None
     for r in regions:
         raw, err = cloud.get_devices(r)
         if raw:
             all_raw.extend(raw)
+        elif err:
+            last_err = err
 
     if not all_raw:
-        return [], None
+        return [], last_err
 
     seen_ids: set[str] = set()
     devices: list[XiaomiCloudDevice] = []

@@ -620,11 +620,17 @@ class TUITaskRunner:
 
     def show_results(self, lines: list[str]) -> None:
         """Transition from 'working' to 'results' — called from task thread."""
-        self.result_lines = lines
-        self.phase = "results"
-        self.scroll_offset = 0
+        def _apply() -> None:
+            self.result_lines = lines
+            self.phase = "results"
+            self.scroll_offset = 0
+            if self._app:
+                self._app.invalidate()
+
         if self._app:
-            self._app.invalidate()
+            self._app.call_from_executor(_apply)
+        else:
+            _apply()
 
     # ── mouse ────────────────────────────────────────────────────────
 
