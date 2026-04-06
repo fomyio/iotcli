@@ -487,7 +487,7 @@ def _tuya_import(config: ConfigManager) -> str | None:
         else:
             api_key = api_secret = region = ""
 
-    if not api_key:
+    if not (api_key and api_secret):
         # Show setup instructions
         console.print()
         from rich.panel import Panel
@@ -651,7 +651,7 @@ def _xiaomi_import(config: ConfigManager) -> str | None:
         else:
             username = password = region = ""
 
-    if not username:
+    if not (username and password):
         # Show setup instructions
         console.print()
         from rich.panel import Panel
