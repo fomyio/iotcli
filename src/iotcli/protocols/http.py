@@ -31,9 +31,17 @@ class HTTPProtocol(BaseProtocol):
             Property(
                 name="brightness",
                 type="int",
-                description="Brightness (Tasmota Dimmer 0-100, ESPHome 0-255).",
+                # Schema is intentionally clamped to the more restrictive Tasmota
+                # range. ESPHome accepts 0-255 natively — multiply by 2.55 before
+                # sending if you target an ESPHome device.
+                description=(
+                    "Brightness percentage (Tasmota Dimmer 0-100). "
+                    "For ESPHome devices the firmware accepts 0-255 — multiply "
+                    "this value by 2.55 before sending."
+                ),
                 minimum=0,
-                maximum=255,
+                maximum=100,
+                example=80,
             ),
             Property(
                 name="color",

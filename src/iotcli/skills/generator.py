@@ -72,7 +72,12 @@ class SkillGenerator:
             results.append(str(path))
             live_slugs.add(device.name)
 
-        self._cleanup_stale(out, live_slugs)
+        # Only purge legacy flat `*.skill.md` files when writing into the
+        # canonical default skills_dir. A user-supplied custom output_dir is
+        # treated as foreign territory — we still remove orphan per-device
+        # SKILL.md dirs (we created those), but never touch unfamiliar files.
+        is_default_dir = out.resolve() == self.skills_dir.resolve()
+        self._cleanup_stale(out, live_slugs, purge_legacy=is_default_dir)
 
         # Tool schema (OpenAI/Anthropic tool spec)
         path = self._write_tools_json(devices, out)
@@ -285,6 +290,14 @@ class SkillGenerator:
                 "actions": ctx["actions"],
             }
 
+        # Shared `device` parameter schema — kept consistent across every tool
+        # so an agent always sees the same description and enum.
+        device_param: dict[str, Any] = {
+            "type": "string",
+            "description": "Device slug as shown in `iotcli --json list`.",
+            "enum": sorted(devices.keys()),
+        }
+
         # Top-level tool definitions in OpenAI function-calling shape.
         tools = [
             {
@@ -302,13 +315,7 @@ class SkillGenerator:
                     "description": "Query the live status of a single device.",
                     "parameters": {
                         "type": "object",
-                        "properties": {
-                            "device": {
-                                "type": "string",
-                                "description": "Device slug as shown in `iotcli --json list`.",
-                                "enum": sorted(devices.keys()),
-                            }
-                        },
+                        "properties": {"device": dict(device_param)},
                         "required": ["device"],
                     },
                 },
@@ -328,12 +335,7 @@ class SkillGenerator:
                     "description": "Turn a device on. For pet feeders this triggers a quick feed.",
                     "parameters": {
                         "type": "object",
-                        "properties": {
-                            "device": {
-                                "type": "string",
-                                "enum": sorted(devices.keys()),
-                            }
-                        },
+                        "properties": {"device": dict(device_param)},
                         "required": ["device"],
                     },
                 },
@@ -345,12 +347,7 @@ class SkillGenerator:
                     "description": "Turn a device off. No-op for pet feeders.",
                     "parameters": {
                         "type": "object",
-                        "properties": {
-                            "device": {
-                                "type": "string",
-                                "enum": sorted(devices.keys()),
-                            }
-                        },
+                        "properties": {"device": dict(device_param)},
                         "required": ["device"],
                     },
                 },
@@ -367,10 +364,7 @@ class SkillGenerator:
                     "parameters": {
                         "type": "object",
                         "properties": {
-                            "device": {
-                                "type": "string",
-                                "enum": sorted(devices.keys()),
-                            },
+                            "device": dict(device_param),
                             "property": {"type": "string"},
                             "value": {
                                 "description": "Value for the property. Type and constraints vary per (device, property) pair."
@@ -407,12 +401,19 @@ class SkillGenerator:
         path.write_text(json.dumps(spec, indent=2))
         return path
 
-    def _cleanup_stale(self, out_dir: Path, live_slugs: set[str]) -> None:
-        """Remove per-device skill dirs and legacy `*.skill.md` files for devices
-        that no longer exist in the config."""
+    def _cleanup_stale(
+        self, out_dir: Path, live_slugs: set[str], *, purge_legacy: bool = True
+    ) -> None:
+        """Remove orphan per-device skill dirs and (optionally) legacy
+        `*.skill.md` files.
+
+        ``purge_legacy`` should be False when writing into a user-supplied
+        custom directory — otherwise we'd silently delete files we did not
+        create.
+        """
         if not out_dir.exists():
             return
-        # Remove stale directories
+        # Remove stale directories — these are always ones we created.
         for child in out_dir.iterdir():
             if child.is_dir() and (child / "SKILL.md").exists():
                 if child.name not in live_slugs:
@@ -423,8 +424,15 @@ class SkillGenerator:
                             child.rmdir()
                     except OSError:
                         pass
-            # Remove legacy flat files (always — they're obsolete now)
-            elif child.is_file() and child.name.endswith(".skill.md"):
+            # Legacy flat `<slug>.skill.md` files from earlier iotcli releases.
+            # Only purge them when writing into the canonical default skills
+            # directory; a custom output_dir may contain unrelated user files
+            # that happen to share the suffix.
+            elif (
+                purge_legacy
+                and child.is_file()
+                and child.name.endswith(".skill.md")
+            ):
                 try:
                     child.unlink()
                 except OSError:

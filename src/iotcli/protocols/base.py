@@ -39,7 +39,12 @@ class Property:
         schema: dict[str, Any] = {"type": type_map[self.type]}
         if self.description:
             schema["description"] = self.description
-        if self.enum:
+        if self.type == "trigger":
+            # Triggers are fire-and-forget: only `true` is meaningful. Constraining
+            # the schema closes a footgun for protocols (e.g. miIO) that forward
+            # the value straight to the device.
+            schema["enum"] = [True]
+        elif self.enum:
             schema["enum"] = self.enum
         if self.minimum is not None:
             schema["minimum"] = self.minimum
