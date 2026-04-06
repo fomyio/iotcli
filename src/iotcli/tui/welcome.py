@@ -33,102 +33,224 @@ def run_interactive(ctx: click.Context) -> None:
             console.print()
             break
 
-        # Dispatch the action (outside full-screen, normal terminal output)
-        result = _dispatch_action(action, ctx)
-
-        # If sub-menu returned "back", skip the pause and loop immediately
-        if result == "__back__":
-            continue
-
-        # Pause before returning to welcome screen
-        console.print()
-        _wait_for_enter()
-
-
-def _wait_for_enter() -> None:
-    """Simple inline pause so user can read output before full-screen returns."""
-    console.print()
-    try:
-        input("  Press Enter to return to menu...")
-    except (KeyboardInterrupt, EOFError):
-        pass
+        # Dispatch — everything stays in full-screen TUI
+        _dispatch_action(action, ctx)
 
 
 # ── Dispatch ─────────────────────────────────────────────────────────────────
 
 
-def _dispatch_action(action: str, ctx: click.Context) -> str | None:
-    """Route a menu selection. Returns '__back__' if user went back."""
+def _dispatch_action(action: str, ctx: click.Context) -> None:
+    """Route a menu selection — all actions stay inside full-screen TUI."""
     config: ConfigManager = ctx.obj["config"]
 
     if action == "help":
-        click.echo(ctx.get_help())
-        return None
+        _help_in_tui(ctx)
 
-    if action == "discover":
-        from iotcli.cli.commands.discover import discover
-        ctx.invoke(discover)
-        return None
+    elif action == "discover":
+        _discover_in_tui(ctx)
 
-    if action == "status-all":
-        from iotcli.cli.commands.device import status_all
-        ctx.invoke(status_all)
-        return None
+    elif action == "status-all":
+        _status_all_in_tui(ctx)
 
-    if action == "setup":
+    elif action == "list":
+        _list_in_tui(ctx)
+
+    elif action == "skills":
+        _skills_in_tui(ctx)
+
+    elif action == "control":
+        _control_in_tui(ctx)
+
+    elif action == "setup":
         from iotcli.tui.wizard import SetupWizard
         wizard = SetupWizard(
             config=config,
             verbose=ctx.obj.get("verbose", False),
             debug=ctx.obj.get("debug", False),
         )
-        result = wizard.run()
-        return result  # "__back__" if user cancelled, None otherwise
+        wizard.run()
 
-    if action == "list":
-        from iotcli.cli.commands.device import list_devices
-        ctx.invoke(list_devices)
-        return None
+    elif action == "cloud-import":
+        _cloud_import_interactive(ctx)
 
-    if action == "skills":
-        from iotcli.skills.generator import SkillGenerator
+
+# ── TUI-native action handlers ──────────────────────────────────────────────
+
+
+def _help_in_tui(ctx: click.Context) -> None:
+    """Show CLI help text inside a TUI results viewer."""
+    from iotcli.tui.interactive import TUITaskRunner
+
+    help_text = ctx.get_help()
+    lines = help_text.splitlines()
+
+    runner = TUITaskRunner("Help", "iotcli command reference")
+    runner.run(lambda r: r.show_results(lines))
+
+
+def _discover_in_tui(ctx: click.Context) -> None:
+    """Run network discovery inside the TUI."""
+    from iotcli.tui.interactive import TUITaskRunner
+    from iotcli.discovery.scanner import DiscoveryScanner, ScanConfig
+
+    config: ConfigManager = ctx.obj["config"]
+
+    def task(runner: TUITaskRunner) -> None:
+        scanner = DiscoveryScanner(
+            verbose=ctx.obj.get("verbose", False),
+            debug=ctx.obj.get("debug", False),
+        )
+        devices = scanner.discover_sync()
+
+        lines: list[str] = []
+        if not devices:
+            lines.append("No IoT devices found.")
+            lines.append("")
+            lines.append("Tips:")
+            lines.append("  • Ensure devices are powered on and on the same network")
+            lines.append("  • Try: iotcli discover --network 192.168.1.0/24")
+        else:
+            lines.append(f"Found {len(devices)} device(s):")
+            lines.append("")
+            for dev in devices:
+                lines.append(f"  {dev['name']}")
+                lines.append(f"      protocol : {dev['protocol']}")
+                lines.append(f"      ip       : {dev['ip']}")
+                lines.append(f"      status   : {dev['status']}")
+                if dev.get("missing_info"):
+                    lines.append(f"      missing  : {', '.join(dev['missing_info'])}")
+                lines.append("")
+
+        runner.show_results(lines)
+
+    runner = TUITaskRunner("Network Discovery", "Scanning for IoT devices…")
+    runner.run(task)
+
+
+def _status_all_in_tui(ctx: click.Context) -> None:
+    """Query all devices and show results inside the TUI."""
+    from iotcli.tui.interactive import TUITaskRunner
+    from iotcli.core.controller import DeviceController
+    from iotcli.core.device import DeviceStatus
+
+    config: ConfigManager = ctx.obj["config"]
+
+    def task(runner: TUITaskRunner) -> None:
+        devices = config.get_all_devices()
+        if not devices:
+            runner.show_results(["No devices configured."])
+            return
+
+        ctrl = DeviceController(
+            verbose=ctx.obj.get("verbose", False),
+            debug=ctx.obj.get("debug", False),
+        )
+        results = ctrl.status_all(devices)
+
+        # Update config status
+        for name, status in results.items():
+            if status.get("online"):
+                config.update_status(name, DeviceStatus.ONLINE)
+            else:
+                config.update_status(name, DeviceStatus.OFFLINE)
+
+        # Format lines
+        lines: list[str] = []
+        for name, status in results.items():
+            online = status.get("online", False)
+            icon = "●" if online else "○"
+            state = "online" if online else "offline"
+            lines.append(f"  {icon} {name} — {state}")
+
+            if online:
+                for k, v in status.items():
+                    if k in ("online", "dps"):
+                        continue
+                    lines.append(f"      {k}: {v}")
+            elif "error" in status:
+                lines.append(f"      error: {status['error']}")
+            lines.append("")
+
+        runner.show_results(lines)
+
+    runner = TUITaskRunner("Status Check", "Querying all devices…")
+    runner.run(task)
+
+
+def _list_in_tui(ctx: click.Context) -> None:
+    """List configured devices inside the TUI."""
+    from iotcli.tui.interactive import TUITaskRunner
+
+    config: ConfigManager = ctx.obj["config"]
+    devices = config.get_all_devices()
+
+    lines: list[str] = []
+    if not devices:
+        lines.append("No devices configured.")
+    else:
+        # Table header
+        lines.append(f"  {'Name':<28} {'Protocol':<10} {'IP':<16} {'Port':<6} {'Status'}")
+        lines.append(f"  {'─' * 28} {'─' * 10} {'─' * 16} {'─' * 6} {'─' * 10}")
+        for name, dev in devices.items():
+            st = getattr(dev, "status", None)
+            status_val = st.value if st else "?"
+            lines.append(
+                f"  {name:<28} {dev.protocol:<10} {dev.ip:<16} {str(dev.port):<6} {status_val}"
+            )
+        lines.append("")
+        lines.append(f"  Total: {len(devices)} device(s)")
+
+    runner = TUITaskRunner("Configured Devices")
+    runner.run(lambda r: r.show_results(lines))
+
+
+def _skills_in_tui(ctx: click.Context) -> None:
+    """Generate AI agent skills and show result in TUI."""
+    from iotcli.tui.interactive import TUITaskRunner
+    from iotcli.skills.generator import SkillGenerator
+
+    config: ConfigManager = ctx.obj["config"]
+
+    def task(runner: TUITaskRunner) -> None:
         gen = SkillGenerator(config)
         results = gen.generate_all()
-        from iotcli.tui.prompts import success
-        success(f"Generated {len(results)} skill file(s).", with_mascot=True)
-        return None
+        lines = [f"Generated {len(results)} skill file(s):", ""]
+        for path in results:
+            lines.append(f"  • {path}")
+        runner.show_results(lines)
 
-    if action == "control":
-        return _control_interactive(ctx)
-
-    if action == "cloud-import":
-        return _cloud_import_interactive(ctx)
-
-    return None
+    runner = TUITaskRunner("AI Agent Skills", "Generating skill files…")
+    runner.run(task)
 
 
-def _control_interactive(ctx: click.Context) -> str | None:
-    """Interactive control sub-flow using full-screen pickers."""
-    from iotcli.tui.interactive import animated_select
+# ── Control (interactive sub-flow inside TUI) ───────────────────────────────
+
+
+def _control_in_tui(ctx: click.Context) -> None:
+    """Interactive control sub-flow — pickers + execution all in TUI."""
+    from iotcli.tui.interactive import animated_select, TUITaskRunner
+    from iotcli.core.controller import DeviceController
+    from iotcli.core.device import DeviceStatus
 
     config: ConfigManager = ctx.obj["config"]
     device_names = config.device_names()
 
     if not device_names:
-        from iotcli.tui.prompts import warn
-        warn("No devices configured. Run setup first.")
-        return None
+        runner = TUITaskRunner("Control")
+        runner.run(lambda r: r.show_results(["No devices configured. Run setup first."]))
+        return
 
-    # Pick device (full-screen, animated)
+    # Pick device (full-screen picker)
     device_name = animated_select(
         title="Which device?",
         choices=[(name, name) for name in device_names],
         subtitle="Select a device to control",
     )
     if device_name is None:
-        return "__back__"
+        return
 
-    # Pick action (full-screen, animated)
+    # Pick action (full-screen picker)
     action = animated_select(
         title=f"Control: {device_name}",
         choices=[
@@ -140,7 +262,7 @@ def _control_interactive(ctx: click.Context) -> str | None:
         subtitle="What would you like to do?",
     )
     if action is None:
-        return "__back__"
+        return
 
     # Handle set: ask for property=value
     value = None
@@ -152,12 +274,12 @@ def _control_interactive(ctx: click.Context) -> str | None:
                 ("color_temperature=4000", "color_temperature=4000"),
                 ("power=on", "power=on"),
                 ("power=off", "power=off"),
-                ("Enter custom value...", "__custom__"),
+                ("Enter custom value…", "__custom__"),
             ],
             subtitle="Pick a preset or enter custom",
         )
         if value is None:
-            return "__back__"
+            return
         if value == "__custom__":
             from InquirerPy import inquirer
             try:
@@ -165,26 +287,96 @@ def _control_interactive(ctx: click.Context) -> str | None:
                     message="Property=Value (e.g. brightness=80):",
                 ).execute()
             except KeyboardInterrupt:
-                return "__back__"
+                return
             if not value or "=" not in value:
-                from iotcli.tui.prompts import error
-                error("Invalid format. Use: property=value")
-                return None
+                runner = TUITaskRunner("Control Error")
+                runner.run(lambda r: r.show_results(["Invalid format. Use: property=value"]))
+                return
 
-    # Execute the command (outputs to terminal normally)
-    console.print()
-    from iotcli.cli.commands.control import control
-    ctx.invoke(control, action=action, device_name=device_name, value=value)
-    return None
+    # Execute the command inside TUI
+    def task(runner: TUITaskRunner) -> None:
+        ctrl = DeviceController(
+            verbose=ctx.obj.get("verbose", False),
+            debug=ctx.obj.get("debug", False),
+        )
+        device = config.get_device(device_name)
+
+        try:
+            if action == "status":
+                status = ctrl.get_status(device)
+                if status.get("online"):
+                    config.update_status(device_name, DeviceStatus.ONLINE)
+                else:
+                    config.update_status(device_name, DeviceStatus.OFFLINE)
+
+                lines = []
+                online = status.get("online", False)
+                icon = "●" if online else "○"
+                lines.append(f"  {device_name} — {'online' if online else 'offline'}")
+                lines.append("")
+                for k, v in status.items():
+                    if k in ("online", "dps"):
+                        continue
+                    lines.append(f"    {k}: {v}")
+                runner.show_results(lines)
+
+            elif action == "on":
+                ok = ctrl.turn_on(device)
+                if ok:
+                    config.update_status(device_name, DeviceStatus.ONLINE)
+                    runner.show_results([f"  ● {device_name} is now ON"])
+                else:
+                    runner.show_results([f"  ✗ Failed to turn on {device_name}"])
+
+            elif action == "off":
+                ok = ctrl.turn_off(device)
+                if ok:
+                    config.update_status(device_name, DeviceStatus.ONLINE)
+                    runner.show_results([f"  ● {device_name} is now OFF"])
+                else:
+                    runner.show_results([f"  ✗ Failed to turn off {device_name}"])
+
+            elif action == "set":
+                prop, raw = value.split("=", 1)
+                coerced = _coerce(raw)
+                ok = ctrl.set_value(device, prop, coerced)
+                if ok:
+                    config.update_status(device_name, DeviceStatus.ONLINE)
+                    runner.show_results([f"  ✓ Set {prop} = {coerced}"])
+                else:
+                    runner.show_results([f"  ✗ Failed to set {prop}"])
+
+        except Exception as e:
+            runner.show_results([f"  Error: {e}"])
+
+    labels = {"status": "Getting status…", "on": "Turning on…", "off": "Turning off…", "set": "Setting property…"}
+    runner = TUITaskRunner(f"Control: {device_name}", labels.get(action, "Working…"))
+    runner.run(task)
+
+
+def _coerce(raw: str):
+    """Type-coerce a string value."""
+    low = raw.lower()
+    if low in ("true", "on", "yes"):
+        return True
+    if low in ("false", "off", "no"):
+        return False
+    try:
+        return int(raw)
+    except ValueError:
+        try:
+            return float(raw)
+        except ValueError:
+            return raw
 
 
 # ── Cloud import ─────────────────────────────────────────────────────────────
 
 
-def _cloud_import_interactive(ctx: click.Context) -> str | None:
+def _cloud_import_interactive(ctx: click.Context) -> None:
     """Import devices from a cloud account (Tuya, Xiaomi)."""
     config: ConfigManager = ctx.obj["config"]
-    return _cloud_import_with_config(config)
+    _cloud_import_with_config(config)
 
 
 def _cloud_import_with_config(config: ConfigManager) -> str | None:
