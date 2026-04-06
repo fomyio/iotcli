@@ -12,7 +12,7 @@ from typing import Any
 import tinytuya
 
 from iotcli.core.registry import register_protocol
-from iotcli.protocols.base import BaseProtocol, ProtocolMeta
+from iotcli.protocols.base import BaseProtocol, ProtocolMeta, Property
 
 
 # ── Tuya device profiles ────────────────────────────────────────────────────
@@ -32,6 +32,16 @@ class TuyaProfile:
 
     # Override to list settable property names for skill generation
     settable: list[str] = ["power"]
+
+    # Rich typed properties — preferred over `settable`. When provided, the skill
+    # generator emits type/enum/range info; otherwise it falls back to `settable`.
+    properties: list[Property] = [
+        Property(name="power", type="enum", enum=["on", "off"], description="Power state."),
+    ]
+    status_properties: list[Property] = [
+        Property(name="online", type="bool", settable=False),
+        Property(name="power", type="enum", enum=["on", "off", "unknown"], settable=False),
+    ]
 
     def interpret_status(self, dps: dict[int, Any]) -> dict[str, Any]:
         """Convert raw DPS to human-readable status dict."""
@@ -60,14 +70,43 @@ class LightProfile(TuyaProfile):
     description = "Tuya smart light / bulb"
     dps_map = {"power": 1, "brightness": 2, "color_temperature": 3, "mode": 4, "color": 5}
     settable = ["power", "brightness", "color_temperature", "mode", "color"]
-
-    def interpret_status(self, dps: dict[int, Any]) -> dict[str, Any]:
-        s = super().interpret_status(dps)
-        if 2 in dps:
-            s["brightness"] = dps[2]
-        if 3 in dps:
-            s["color_temperature"] = dps[3]
-        return s
+    properties = [
+        Property(name="power", type="enum", enum=["on", "off"], description="Power state."),
+        Property(
+            name="brightness",
+            type="int",
+            description="Brightness level (Tuya raw scale, typically 10-1000).",
+            minimum=10,
+            maximum=1000,
+            example=500,
+        ),
+        Property(
+            name="color_temperature",
+            type="int",
+            description="Color temperature (Tuya raw scale, typically 0-1000).",
+            minimum=0,
+            maximum=1000,
+            example=500,
+        ),
+        Property(
+            name="mode",
+            type="enum",
+            description="Bulb mode.",
+            enum=["white", "colour", "scene", "music"],
+        ),
+        Property(
+            name="color",
+            type="str",
+            description="Color as a Tuya HSV hex string (12 hex chars).",
+            example="0084007003e8",
+        ),
+    ]
+    status_properties = [
+        Property(name="online", type="bool", settable=False),
+        Property(name="power", type="enum", enum=["on", "off", "unknown"], settable=False),
+        Property(name="brightness", type="int", settable=False),
+        Property(name="color_temperature", type="int", settable=False),
+    ]
 
 
 class SwitchProfile(TuyaProfile):
@@ -75,6 +114,23 @@ class SwitchProfile(TuyaProfile):
     description = "Tuya smart plug / switch"
     dps_map = {"power": 1, "countdown": 2}
     settable = ["power", "countdown"]
+    properties = [
+        Property(name="power", type="enum", enum=["on", "off"], description="Power state."),
+        Property(
+            name="countdown",
+            type="int",
+            description="Auto-off countdown in seconds (0 disables).",
+            minimum=0,
+            maximum=86400,
+            unit="s",
+            example=300,
+        ),
+    ]
+    status_properties = [
+        Property(name="online", type="bool", settable=False),
+        Property(name="power", type="enum", enum=["on", "off", "unknown"], settable=False),
+        Property(name="countdown", type="int", unit="s", settable=False),
+    ]
 
 
 class PetFeederProfile(TuyaProfile):
@@ -106,11 +162,49 @@ class PetFeederProfile(TuyaProfile):
     }
 
     actions = {
-        "quick_feed": "Dispense one portion immediately",
-        "manual_feed": "Dispense N portions (1-60)",
+        "quick_feed": "Trigger an immediate single-portion feed (no value).",
+        "portions": "Dispense N portions immediately (1-60).",
     }
 
     settable = ["portions", "quick_feed", "slow_feed", "light"]
+
+    properties = [
+        Property(
+            name="portions",
+            type="int",
+            description="Dispense this many portions immediately.",
+            minimum=1,
+            maximum=60,
+            example=2,
+        ),
+        Property(
+            name="quick_feed",
+            type="trigger",
+            description="Trigger one quick feed (no value needed — pass `true`).",
+            example=True,
+        ),
+        Property(
+            name="slow_feed",
+            type="bool",
+            description="Enable slow-feed mode (drops portions over a longer interval).",
+        ),
+        Property(
+            name="light",
+            type="bool",
+            description="Enable the indicator light on the feeder.",
+        ),
+    ]
+    status_properties = [
+        Property(name="online", type="bool", settable=False),
+        Property(name="battery", type="int", unit="%", description="Battery percentage.", settable=False),
+        Property(name="charging", type="bool", description="Whether the feeder is charging.", settable=False),
+        Property(name="feed_state", type="int", description="Internal feed state code.", settable=False),
+        Property(name="last_feed_amount", type="int", description="Portions in the most recent feed.", settable=False),
+        Property(name="slow_feed", type="bool", settable=False),
+        Property(name="light", type="bool", settable=False),
+        Property(name="meal_plan", type="str", description="Programmed meal schedule (raw).", settable=False),
+        Property(name="food_empty", type="bool", description="True if food hopper is empty.", settable=False),
+    ]
 
     def interpret_status(self, dps: dict[int, Any]) -> dict[str, Any]:
         s: dict[str, Any] = {"online": True, "dps": dps}

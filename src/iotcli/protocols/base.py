@@ -4,7 +4,52 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Literal
+
+
+PropertyType = Literal["int", "float", "str", "bool", "enum", "trigger"]
+
+
+@dataclass
+class Property:
+    """A typed device property — used by the skill generator to produce real
+    parameter schemas (with enums, ranges, units) for AI agents."""
+
+    name: str
+    type: PropertyType
+    description: str = ""
+    enum: list[str] | None = None
+    minimum: int | float | None = None
+    maximum: int | float | None = None
+    unit: str | None = None
+    example: Any = None
+    settable: bool = True
+    readable: bool = True
+
+    def to_jsonschema(self) -> dict[str, Any]:
+        """Convert to a JSON Schema fragment usable in OpenAI/Anthropic tool specs."""
+        type_map = {
+            "int": "integer",
+            "float": "number",
+            "str": "string",
+            "bool": "boolean",
+            "enum": "string",
+            "trigger": "boolean",
+        }
+        schema: dict[str, Any] = {"type": type_map[self.type]}
+        if self.description:
+            schema["description"] = self.description
+        if self.enum:
+            schema["enum"] = self.enum
+        if self.minimum is not None:
+            schema["minimum"] = self.minimum
+        if self.maximum is not None:
+            schema["maximum"] = self.maximum
+        if self.unit:
+            schema["x-unit"] = self.unit
+        if self.example is not None:
+            schema["examples"] = [self.example]
+        return schema
 
 
 @dataclass
@@ -20,7 +65,12 @@ class ProtocolMeta:
     setup_guide: str = ""
     is_cloud: bool = False
     profiles: dict[str, str] = field(default_factory=dict)  # profile_name -> description
+    # Backwards-compatible flat list of property names. Prefer `properties` below for new code.
     settable_properties: list[str] = field(default_factory=list)
+    # Rich typed properties (settable + status). When provided, the skill generator
+    # uses these to emit type/enum/range info instead of bare names.
+    properties: list[Property] = field(default_factory=list)
+    status_properties: list[Property] = field(default_factory=list)
 
 
 class BaseProtocol(ABC):

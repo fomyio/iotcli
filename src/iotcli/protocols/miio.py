@@ -12,7 +12,171 @@ from typing import Any
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 
 from iotcli.core.registry import register_protocol
-from iotcli.protocols.base import BaseProtocol, ProtocolMeta
+from iotcli.protocols.base import BaseProtocol, ProtocolMeta, Property
+
+
+# ── miIO device profiles ────────────────────────────────────────────────────
+
+
+class MiIOProfile:
+    """Base profile — describes settable + status properties for a miIO device class."""
+
+    name = "generic"
+    description = "Generic Xiaomi miIO device"
+    properties: list[Property] = [
+        Property(name="power", type="enum", description="Power state.", enum=["on", "off"]),
+    ]
+    status_properties: list[Property] = [
+        Property(name="online", type="bool", settable=False),
+        Property(name="power", type="enum", enum=["on", "off", "unknown"], settable=False),
+    ]
+
+
+class BulbProfile(MiIOProfile):
+    name = "bulb"
+    description = "Xiaomi smart LED bulb / Yeelight"
+    properties = [
+        Property(name="power", type="enum", enum=["on", "off"], description="Power state."),
+        Property(
+            name="brightness",
+            type="int",
+            description="Brightness percentage.",
+            minimum=1,
+            maximum=100,
+            unit="%",
+            example=80,
+        ),
+        Property(
+            name="color_temperature",
+            type="int",
+            description="Color temperature in Kelvin (warm→cool).",
+            minimum=1700,
+            maximum=6500,
+            unit="K",
+            example=4000,
+        ),
+        Property(
+            name="color",
+            type="str",
+            description='RGB color as "r,g,b" or 24-bit integer.',
+            example="255,180,90",
+        ),
+        Property(
+            name="mode",
+            type="enum",
+            description="Operating mode.",
+            enum=["day", "night", "color", "hsv", "ct"],
+        ),
+    ]
+    status_properties = [
+        Property(name="online", type="bool", settable=False),
+        Property(name="power", type="enum", enum=["on", "off", "unknown"], settable=False),
+        Property(name="brightness", type="int", unit="%", settable=False),
+        Property(name="color_temperature", type="int", unit="K", settable=False),
+    ]
+
+
+class CameraProfile(MiIOProfile):
+    name = "camera"
+    description = "Xiaomi smart camera"
+    properties = [
+        Property(name="power", type="enum", enum=["on", "off"], description="Camera power."),
+        Property(
+            name="motion_detection",
+            type="bool",
+            description="Enable / disable motion detection.",
+        ),
+        Property(
+            name="night_mode",
+            type="enum",
+            description="IR night-vision mode.",
+            enum=["auto", "on", "off"],
+        ),
+    ]
+    status_properties = [
+        Property(name="online", type="bool", settable=False),
+        Property(name="power", type="enum", enum=["on", "off", "unknown"], settable=False),
+        Property(name="motion_detection", type="bool", settable=False),
+    ]
+
+
+class AirFryerProfile(MiIOProfile):
+    name = "airfryer"
+    description = "Xiaomi smart air fryer"
+    properties = [
+        Property(
+            name="power",
+            type="enum",
+            enum=["on", "off"],
+            description="Power state — only meaningful between cooks.",
+        ),
+        Property(
+            name="target_temp",
+            type="int",
+            description="Target cooking temperature.",
+            minimum=40,
+            maximum=200,
+            unit="C",
+            example=180,
+        ),
+        Property(
+            name="target_time",
+            type="int",
+            description="Cooking duration in minutes.",
+            minimum=1,
+            maximum=1440,
+            unit="min",
+            example=15,
+        ),
+        Property(
+            name="start",
+            type="trigger",
+            description="Start the current cooking program.",
+        ),
+        Property(
+            name="pause",
+            type="trigger",
+            description="Pause an active cooking program.",
+        ),
+    ]
+    status_properties = [
+        Property(name="online", type="bool", settable=False),
+        Property(name="power", type="enum", enum=["on", "off", "unknown"], settable=False),
+        Property(name="target_temp", type="int", unit="C", settable=False),
+        Property(name="target_time", type="int", unit="min", settable=False),
+        Property(name="status", type="str", description="Current cook state.", settable=False),
+    ]
+
+
+class VacuumProfile(MiIOProfile):
+    name = "vacuum"
+    description = "Xiaomi/Roborock robot vacuum"
+    properties = [
+        Property(name="power", type="enum", enum=["on", "off"], description="Cleaning on/off."),
+        Property(
+            name="fan_speed",
+            type="enum",
+            description="Suction power.",
+            enum=["quiet", "balanced", "turbo", "max"],
+        ),
+        Property(name="dock", type="trigger", description="Send the vacuum back to its dock."),
+    ]
+    status_properties = [
+        Property(name="online", type="bool", settable=False),
+        Property(name="power", type="enum", enum=["on", "off", "unknown"], settable=False),
+        Property(name="battery", type="int", unit="%", settable=False),
+        Property(name="state", type="str", description="Vacuum state machine.", settable=False),
+    ]
+
+
+# Profile registry
+MIIO_PROFILES: dict[str, type[MiIOProfile]] = {
+    "generic": MiIOProfile,
+    "bulb": BulbProfile,
+    "camera": CameraProfile,
+    "airfryer": AirFryerProfile,
+    "vacuum": VacuumProfile,
+}
 
 
 @register_protocol("miio")
@@ -30,7 +194,9 @@ class MiIOProtocol(BaseProtocol):
             "  2. Xiaomi Cloud Tokens Extractor (pip install xiaomi_tokens)\n"
             "  3. Mi Home app + token extractor GitHub tool"
         ),
-        settable_properties=["brightness", "color_temperature", "color", "mode"],
+        profiles={p.name: p.description for p in [cls() for cls in MIIO_PROFILES.values()]},
+        # Generic placeholder — overridden per device via profile in the skill generator.
+        settable_properties=["power"],
     )
 
     MAGIC = 0x2131

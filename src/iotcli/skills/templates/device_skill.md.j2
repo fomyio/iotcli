@@ -1,72 +1,93 @@
 ---
-device: {{ device.name }}
-protocol: {{ device.protocol }}
-{% if device.profile %}
-profile: {{ device.profile }}
-{% endif %}
+name: iotcli-{{ device.name }}
+description: {{ description }}
 ---
 
-# {{ device.name }} — AI Agent Skill
+# {{ device.name }}
 
-**Protocol:** {{ device.protocol }}
-{% if device.profile %}
-**Profile:** {{ device.profile }}
+| Field | Value |
+|---|---|
+| Protocol | `{{ device.protocol }}`{% if meta %} — {{ meta.display_name }}{% endif %} |
+{% if profile_name and profile_name != "generic" %}
+| Profile | `{{ profile_name }}` |
 {% endif %}
-**IP:** {{ device.ip }}:{{ device.port }}
-{% if meta.is_cloud %}
-**Connection:** Cloud (requires internet)
-{% else %}
-**Connection:** Local network
-{% endif %}
+| Address | `{{ device.ip }}:{{ device.port }}` |
+| Connection | {% if meta and meta.is_cloud %}Cloud (requires internet){% else %}Local network{% endif %} |
+| Capabilities | {% for c in capabilities %}`{{ c }}`{% if not loop.last %}, {% endif %}{% endfor %} |
 
-## Available Commands
+## How an agent should use this skill
 
-### Check Status
+All commands MUST use the `--json` flag to get machine-readable output. Always check
+status before issuing a control command — the device may be offline.
+
+### Query status
 ```bash
 iotcli --json control status "{{ device.name }}"
 ```
 
-### Power Control
+### Power control
 ```bash
 iotcli --json control on "{{ device.name }}"
 iotcli --json control off "{{ device.name }}"
 ```
+{% if device.protocol in ("tuya", "petfeeder") and profile_name == "petfeeder" %}
 
-{% if settable_properties %}
-### Set Properties
-{% for prop in settable_properties %}
+> **Pet feeder note:** `on` triggers a single quick feed (1 portion). There is no
+> meaningful `off` state. Use `set ... "portions=N"` to dispense N portions.
+{% endif %}
+
+{% if settable_names %}
+### Settable properties
+
+| Property | Type | Allowed values | Description |
+|---|---|---|---|
+{% for p in properties %}{% if p.settable and p.type != "trigger" %}| `{{ p.name }}` | {{ p.type }}{% if p.unit %} ({{ p.unit }}){% endif %} | {% if p.enum %}{% for v in p.enum %}`{{ v }}`{% if not loop.last %}, {% endif %}{% endfor %}{% elif p.minimum is not none and p.maximum is not none %}{{ p.minimum }}–{{ p.maximum }}{% else %}—{% endif %} | {{ p.description or "" }} |
+{% endif %}{% endfor %}
+
+#### Example invocations
+{% for p in properties %}{% if p.settable and p.type != "trigger" %}
 ```bash
-iotcli --json control set "{{ device.name }}" "{{ prop }}=<value>"
+iotcli --json control set "{{ device.name }}" "{{ p.name }}={% if p.example is not none %}{{ p.example }}{% elif p.enum %}{{ p.enum[0] }}{% elif p.type == "bool" %}true{% elif p.minimum is not none %}{{ p.minimum }}{% else %}<value>{% endif %}"
 ```
-{% endfor %}
+{% endif %}{% endfor %}
+{% endif %}
+
+{% if trigger_names %}
+### Triggers (no value)
+
+These properties are *commands* — they accept no value and the CLI passes `true`.
+
+{% for p in properties %}{% if p.type == "trigger" %}
+- **`{{ p.name }}`** — {{ p.description or "" }}
+  ```bash
+  iotcli --json control set "{{ device.name }}" "{{ p.name }}=true"
+  ```
+{% endif %}{% endfor %}
 {% endif %}
 
 {% if actions %}
-### Custom Actions
+### High-level actions
+
 {% for action_name, action_desc in actions.items() %}
-- **{{ action_name }}**: {{ action_desc }}
-  ```bash
-  iotcli --json control set "{{ device.name }}" "{{ action_name }}=<value>"
-  ```
+- **{{ action_name }}** — {{ action_desc }}
 {% endfor %}
 {% endif %}
 
-## Status Fields
+### Status fields
 
-When you query this device's status, expect these fields in the JSON response:
+When you run `iotcli --json control status "{{ device.name }}"`, expect these fields:
 
-{% for field in status_fields %}
-- `{{ field }}`
+| Field | Type | Description |
+|---|---|---|
+{% for p in status_properties %}| `{{ p.name }}` | {{ p.type }}{% if p.unit %} ({{ p.unit }}){% endif %}{% if p.enum %} — one of {% for v in p.enum %}`{{ v }}`{% if not loop.last %}, {% endif %}{% endfor %}{% endif %} | {{ p.description or "" }} |
 {% endfor %}
 
 ## Rules
 
-- Always use `--json` for machine-readable output.
-- Check status before sending commands (the device may be offline).
-{% if meta.is_cloud %}
-- This is a cloud device — commands require internet connectivity.
-{% endif %}
-{% if device.protocol == "tuya" and device.profile == "petfeeder" %}
-- "on" triggers a quick feed (1 portion). Use `portions=N` for specific amounts (1-60).
-- There is no "off" state for a pet feeder.
+- Always pass `--json` for parseable output.
+- Never invoke `iotcli setup` (interactive only).
+- Never guess device names — query them with `iotcli --json list`.
+- Verify the property name and value type against the table above before calling `set`.
+{% if meta and meta.is_cloud %}
+- This is a **cloud** device — commands require internet connectivity and may be slow.
 {% endif %}

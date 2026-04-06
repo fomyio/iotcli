@@ -7,7 +7,7 @@ from typing import Any
 import requests
 
 from iotcli.core.registry import register_protocol
-from iotcli.protocols.base import BaseProtocol, ProtocolMeta
+from iotcli.protocols.base import BaseProtocol, ProtocolMeta, Property
 
 
 @register_protocol("http")
@@ -21,6 +21,32 @@ class HTTPProtocol(BaseProtocol):
         capabilities=["on", "off", "status", "set"],
         setup_guide="Just provide the device IP. No credentials needed for most HTTP devices.",
         settable_properties=["power", "brightness", "color"],
+        properties=[
+            Property(
+                name="power",
+                type="enum",
+                enum=["ON", "OFF"],
+                description="Power state. Tasmota uses ON/OFF, ESPHome uses turn_on/turn_off endpoints.",
+            ),
+            Property(
+                name="brightness",
+                type="int",
+                description="Brightness (Tasmota Dimmer 0-100, ESPHome 0-255).",
+                minimum=0,
+                maximum=255,
+            ),
+            Property(
+                name="color",
+                type="str",
+                description='Color hex string (e.g. "FFAA00") or "r,g,b" depending on firmware.',
+                example="FFAA00",
+            ),
+        ],
+        status_properties=[
+            Property(name="online", type="bool", settable=False),
+            Property(name="power", type="str", settable=False),
+            Property(name="device_name", type="str", settable=False),
+        ],
     )
 
     def __init__(self, device_config: dict[str, Any], **kw):
