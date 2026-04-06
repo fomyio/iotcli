@@ -1,0 +1,62 @@
+# ── Area labels (by file path) ────────────────────────────────────
+
+"area: tui":
+  - changed-files:
+      - any-glob-to-any-file: "src/iotcli/tui/**"
+
+"area: cloud":
+  - changed-files:
+      - any-glob-to-any-file: "src/iotcli/cloud/**"
+
+"area: protocols":
+  - changed-files:
+      - any-glob-to-any-file: "src/iotcli/protocols/**"
+
+"area: cli":
+  - changed-files:
+      - any-glob-to-any-file: "src/iotcli/cli/**"
+
+"area: config":
+  - changed-files:
+      - any-glob-to-any-file: "src/iotcli/config/**"
+
+"area: core":
+  - changed-files:
+      - any-glob-to-any-file: "src/iotcli/core/**"
+
+"area: discovery":
+  - changed-files:
+      - any-glob-to-any-file: "src/iotcli/discovery/**"
+
+"area: skills":
+  - changed-files:
+      - any-glob-to-any-file: "src/iotcli/skills/**"
+
+# ── Infra / CI labels ────────────────────────────────────────────
+
+"ci/cd":
+  - changed-files:
+      - any-glob-to-any-file:
+          - ".github/**"
+          - "Dockerfile"
+          - "docker-compose*.yml"
+
+"dependencies":
+  - changed-files:
+      - any-glob-to-any-file:
+          - "pyproject.toml"
+          - "requirements*.txt"
+          - "setup.cfg"
+
+"documentation":
+  - changed-files:
+      - any-glob-to-any-file:
+          - "**/*.md"
+          - "docs/**"
+
+"tests":
+  - changed-files:
+      - any-glob-to-any-file:
+          - "tests/**"
+          - "**/*_test.py"
+          - "**/test_*.py"
