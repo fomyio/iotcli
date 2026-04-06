@@ -9,7 +9,7 @@ from typing import Any
 import paho.mqtt.client as mqtt
 
 from iotcli.core.registry import register_protocol
-from iotcli.protocols.base import BaseProtocol, ProtocolMeta
+from iotcli.protocols.base import BaseProtocol, ProtocolMeta, Property
 
 
 @register_protocol("mqtt")
@@ -27,6 +27,36 @@ class MQTTProtocol(BaseProtocol):
             "Credentials are optional — only needed if the broker requires auth."
         ),
         settable_properties=["state", "brightness", "color_temp"],
+        properties=[
+            Property(
+                name="state",
+                type="enum",
+                enum=["ON", "OFF", "TOGGLE"],
+                description="Zigbee2MQTT power state.",
+            ),
+            Property(
+                name="brightness",
+                type="int",
+                description="Brightness 0-254 (Zigbee2MQTT convention).",
+                minimum=0,
+                maximum=254,
+                example=180,
+            ),
+            Property(
+                name="color_temp",
+                type="int",
+                description="Color temperature in mireds (153 cool → 500 warm).",
+                minimum=153,
+                maximum=500,
+                example=300,
+            ),
+        ],
+        status_properties=[
+            Property(name="online", type="bool", settable=False),
+            Property(name="state", type="enum", enum=["ON", "OFF", "unknown"], settable=False),
+            Property(name="brightness", type="int", settable=False),
+            Property(name="color_temp", type="int", settable=False),
+        ],
     )
 
     def __init__(self, device_config: dict[str, Any], **kw):

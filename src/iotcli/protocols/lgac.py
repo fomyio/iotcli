@@ -9,7 +9,7 @@ from typing import Any
 import requests
 
 from iotcli.core.registry import register_protocol
-from iotcli.protocols.base import BaseProtocol, ProtocolMeta
+from iotcli.protocols.base import BaseProtocol, ProtocolMeta, Property
 
 _API_KEY = "v6GFvkweNo7DK7yD3ylIZ9w52aKBU0eJ7wLXkSR3"
 _CLIENT_ID_PREFIX = "thinq-open-"
@@ -44,6 +44,69 @@ class LGACProtocol(BaseProtocol):
             "  4. Copy the token (valid 90 days)"
         ),
         settable_properties=["temperature", "mode", "fan_speed"],
+        properties=[
+            Property(
+                name="temperature",
+                type="int",
+                description="Target temperature in Celsius.",
+                minimum=16,
+                maximum=30,
+                unit="C",
+                example=22,
+            ),
+            Property(
+                name="mode",
+                type="enum",
+                description="Air conditioner job mode.",
+                enum=["COOL", "HEAT", "DRY", "FAN", "AUTO"],
+                example="COOL",
+            ),
+            Property(
+                name="fan_speed",
+                type="enum",
+                description="Fan strength.",
+                enum=["LOW", "MID", "HIGH", "AUTO"],
+                example="AUTO",
+            ),
+        ],
+        status_properties=[
+            Property(name="online", type="bool", description="Whether the device responded.", settable=False),
+            Property(
+                name="power",
+                type="enum",
+                description="Current power state.",
+                enum=["POWER_ON", "POWER_OFF", "unknown"],
+                settable=False,
+            ),
+            Property(
+                name="mode",
+                type="enum",
+                description="Active job mode.",
+                enum=["COOL", "HEAT", "DRY", "FAN", "AUTO", "unknown"],
+                settable=False,
+            ),
+            Property(
+                name="fan_speed",
+                type="enum",
+                description="Active fan strength.",
+                enum=["LOW", "MID", "HIGH", "AUTO", "unknown"],
+                settable=False,
+            ),
+            Property(
+                name="current_temp",
+                type="float",
+                description="Measured room temperature in Celsius.",
+                unit="C",
+                settable=False,
+            ),
+            Property(
+                name="target_temp",
+                type="float",
+                description="Setpoint temperature in Celsius.",
+                unit="C",
+                settable=False,
+            ),
+        ],
     )
 
     def __init__(self, device_config: dict[str, Any], **kw):
