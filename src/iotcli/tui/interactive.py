@@ -502,3 +502,262 @@ def animated_select(
     Returns selected value, or None if user pressed back/escape.
     """
     return AnimatedPicker(title, choices, subtitle, show_back=show_back).run()
+
+
+# ── Full-screen task runner ────────────────────────────────────────────────
+
+
+WORK_EYES = ["@  @", "◉  ◉", "⊙  ⊙"]
+
+
+class TUITaskRunner:
+    """Run a task in background, show animated mascot, then scrollable results.
+
+    Usage::
+
+        runner = TUITaskRunner("Network Discovery", "Scanning for IoT devices…")
+
+        def task(r: TUITaskRunner):
+            # do work …
+            r.show_results(["Found 3 devices", "", "  lamp  miio  192.168.1.7"])
+
+        runner.run(task)
+    """
+
+    def __init__(self, title: str, subtitle: str = ""):
+        self.title = title
+        self.subtitle = subtitle
+        self.phase: str = "working"  # "working" | "results"
+        self.result_lines: list[str] = []
+        self.scroll_offset = 0
+        # animation state
+        self.eye_dir = "center"
+        self.blinking = False
+        self.signal_idx = 3
+        self._work_frame = 0
+        self._done_flag = False
+        self._app: Application | None = None
+
+    # ── rendering ────────────────────────────────────────────────────
+
+    def _mascot_lines(self) -> list[str]:
+        signal = SIGNALS[self.signal_idx % len(SIGNALS)]
+        if self.phase == "working":
+            eyes = WORK_EYES[self._work_frame % len(WORK_EYES)]
+        else:
+            eyes = EYES_BLINK if self.blinking else EYES.get(self.eye_dir, EYES["center"])
+        return [
+            f"      {signal}",
+            "    /--------\\",
+            f"   /   {eyes}   \\",
+            "  /____________\\",
+            "  |  [======]  |",
+            "  |  |      |  |",
+            "  +--+------+--+",
+        ]
+
+    def _build_display(self) -> FormattedText:
+        f: list[tuple[str, str]] = []
+        mascot = self._mascot_lines()
+        art_w = max(len(l) for l in mascot)
+        gap = "      "
+
+        # Right-side header
+        right: list[tuple[str, str]] = [
+            ("bold ansibrightcyan", self.title),
+        ]
+        if self.subtitle:
+            right.append(("ansigray", self.subtitle))
+
+        if self.phase == "working":
+            dots = "." * ((self._work_frame % 3) + 1)
+            right.append(("", ""))
+            right.append(("bold ansibrightyellow", f"Working{dots.ljust(3)}"))
+
+        rows = max(len(mascot), len(right))
+        for i in range(rows):
+            if i < len(mascot):
+                f.append(("ansibrightcyan", mascot[i].ljust(art_w)))
+            else:
+                f.append(("", " " * art_w))
+            f.append(("", gap))
+            if i < len(right):
+                f.append(right[i])
+            f.append(("", "\n"))
+
+        f.append(("", "\n"))
+
+        if self.phase == "results":
+            # Calculate visible height
+            visible_h = 15
+            if self._app:
+                try:
+                    visible_h = self._app.output.get_size().rows - rows - 5
+                    visible_h = max(visible_h, 5)
+                except Exception:
+                    visible_h = 15
+
+            visible = self.result_lines[self.scroll_offset:self.scroll_offset + visible_h]
+            for line in visible:
+                f.append(("", f"  {line}\n"))
+
+            # Scroll indicator
+            total = len(self.result_lines)
+            f.append(("", "\n"))
+            if total > visible_h:
+                top = self.scroll_offset + 1
+                bot = min(self.scroll_offset + visible_h, total)
+                f.append(("ansigray", f"  [{top}–{bot} of {total}]  ↑↓ scroll  "))
+            else:
+                f.append(("ansigray", "  "))
+            f.append(("ansigray", "Enter/Esc back to menu"))
+        else:
+            f.append(("ansigray", "  Ctrl+C to cancel"))
+
+        return FormattedText(f)
+
+    # ── public API (called from task thread) ─────────────────────────
+
+    def show_results(self, lines: list[str]) -> None:
+        """Transition from 'working' to 'results' — called from task thread."""
+        def _apply() -> None:
+            self.result_lines = lines
+            self.phase = "results"
+            self.scroll_offset = 0
+            if self._app:
+                self._app.invalidate()
+
+        if self._app:
+            self._app.call_from_executor(_apply)
+        else:
+            _apply()
+
+    # ── mouse ────────────────────────────────────────────────────────
+
+    def _mouse_handler(self, mouse_event: MouseEvent) -> None:
+        if mouse_event.event_type == MouseEventType.MOUSE_MOVE:
+            x, y = mouse_event.position.x, mouse_event.position.y
+            dx, dy = x - 10, y - 2
+            if abs(dx) < 4 and abs(dy) < 2:
+                self.eye_dir = "center"
+            elif abs(dx) > abs(dy) * 1.3:
+                self.eye_dir = "right" if dx > 0 else "left"
+            else:
+                self.eye_dir = "down" if dy > 0 else "up"
+        elif mouse_event.event_type == MouseEventType.MOUSE_UP:
+            # scroll via mouse wheel is handled by up/down keys
+            pass
+
+    # ── run ──────────────────────────────────────────────────────────
+
+    def run(self, task_fn) -> None:
+        """Run *task_fn(self)* in background; block until user dismisses results."""
+        kb = KeyBindings()
+
+        @kb.add("up")
+        @kb.add("k")
+        def _up(event):
+            if self.phase == "results" and self.scroll_offset > 0:
+                self.scroll_offset -= 1
+
+        @kb.add("down")
+        @kb.add("j")
+        def _down(event):
+            if self.phase == "results":
+                visible_h = 15
+                try:
+                    visible_h = max(event.app.output.get_size().rows - 14, 5)
+                except Exception:
+                    pass
+                max_off = max(0, len(self.result_lines) - visible_h)
+                if self.scroll_offset < max_off:
+                    self.scroll_offset += 1
+
+        @kb.add("pageup")
+        def _pgup(event):
+            if self.phase == "results":
+                self.scroll_offset = max(0, self.scroll_offset - 10)
+
+        @kb.add("pagedown")
+        def _pgdn(event):
+            if self.phase == "results":
+                visible_h = 15
+                try:
+                    visible_h = max(event.app.output.get_size().rows - 14, 5)
+                except Exception:
+                    pass
+                max_off = max(0, len(self.result_lines) - visible_h)
+                self.scroll_offset = min(max_off, self.scroll_offset + 10)
+
+        @kb.add("enter")
+        @kb.add("escape")
+        def _back(event):
+            if self.phase == "results":
+                event.app.exit()
+
+        @kb.add("c-c")
+        def _cancel(event):
+            event.app.exit()
+
+        runner = self
+
+        class _MouseCtrl(FormattedTextControl):
+            def mouse_handler(self, mouse_event: MouseEvent):
+                runner._mouse_handler(mouse_event)
+                return NotImplemented
+
+        control = _MouseCtrl(self._build_display, focusable=True, show_cursor=False)
+
+        self._app = Application(
+            layout=Layout(Window(content=control, always_hide_cursor=True)),
+            key_bindings=kb,
+            mouse_support=True,
+            full_screen=True,
+        )
+
+        self._done_flag = False
+
+        def _blink():
+            time.sleep(0.3)
+            while not self._done_flag:
+                time.sleep(random.uniform(3.0, 5.0))
+                if self._done_flag:
+                    break
+                self.blinking = True
+                if self._app:
+                    self._app.invalidate()
+                time.sleep(0.15)
+                self.blinking = False
+                if self._app:
+                    self._app.invalidate()
+
+        def _signal():
+            time.sleep(0.3)
+            while not self._done_flag:
+                time.sleep(1.0)
+                if self._done_flag:
+                    break
+                self.signal_idx = (self.signal_idx + 1) % len(SIGNALS)
+                if self._app:
+                    self._app.invalidate()
+
+        def _work_anim():
+            while not self._done_flag and self.phase == "working":
+                time.sleep(0.5)
+                self._work_frame += 1
+                if self._app:
+                    self._app.invalidate()
+
+        def _run_task():
+            try:
+                task_fn(runner)
+            except Exception as e:
+                runner.show_results([f"Error: {e}"])
+
+        for fn in (_blink, _signal, _work_anim, _run_task):
+            threading.Thread(target=fn, daemon=True).start()
+
+        try:
+            self._app.run()
+        finally:
+            self._done_flag = True
