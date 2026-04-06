@@ -383,12 +383,20 @@ def _cloud_import_with_config(config: ConfigManager) -> str | None:
     """Cloud import provider picker — works from both main menu and wizard."""
     from iotcli.tui.interactive import animated_select
 
+    # Check which accounts are saved
+    has_tuya = bool(config.vault.load("__tuya_cloud__").get("api_key"))
+    has_xiaomi = bool(config.vault.load("__xiaomi_cloud__").get("username"))
+
+    choices = [
+        ("Tuya / Smart Life", "tuya"),
+        ("Xiaomi / Mi Home", "xiaomi"),
+    ]
+    if has_tuya or has_xiaomi:
+        choices.append(("Manage saved accounts", "manage"))
+
     provider = animated_select(
         title="Import devices from cloud",
-        choices=[
-            ("Tuya / Smart Life", "tuya"),
-            ("Xiaomi / Mi Home", "xiaomi"),
-        ],
+        choices=choices,
         subtitle="Select your cloud platform",
     )
     if provider is None:
@@ -398,6 +406,50 @@ def _cloud_import_with_config(config: ConfigManager) -> str | None:
         return _tuya_import(config)
     if provider == "xiaomi":
         return _xiaomi_import(config)
+    if provider == "manage":
+        return _manage_cloud_accounts(config)
+
+    return None
+
+
+def _manage_cloud_accounts(config: ConfigManager) -> str | None:
+    """View and delete saved cloud accounts."""
+    from iotcli.tui.interactive import animated_select
+    from iotcli.tui import prompts
+    from iotcli.cloud.tuya_cloud import TUYA_REGIONS
+    from iotcli.cloud.xiaomi_cloud import XIAOMI_REGIONS
+
+    tuya_creds = config.vault.load("__tuya_cloud__")
+    xiaomi_creds = config.vault.load("__xiaomi_cloud__")
+
+    choices = []
+    if tuya_creds.get("api_key"):
+        region = TUYA_REGIONS.get(tuya_creds.get("region", ""), tuya_creds.get("region", "?"))
+        choices.append((f"Remove Tuya account (API Key: {tuya_creds['api_key'][:6]}…, region: {region})", "tuya"))
+    if xiaomi_creds.get("username"):
+        user = xiaomi_creds["username"]
+        masked = user[:3] + "…" + user[-4:] if len(user) > 7 else user[:3] + "…"
+        region = XIAOMI_REGIONS.get(xiaomi_creds.get("region", ""), xiaomi_creds.get("region", "?"))
+        choices.append((f"Remove Xiaomi account ({masked}, region: {region})", "xiaomi"))
+
+    if not choices:
+        prompts.info("No saved cloud accounts.")
+        return None
+
+    pick = animated_select(
+        title="Manage Cloud Accounts",
+        choices=choices,
+        subtitle="Select an account to remove",
+    )
+    if pick is None:
+        return "__back__"
+
+    if pick == "tuya":
+        config.vault.delete("__tuya_cloud__")
+        prompts.success("Tuya cloud account removed.", with_mascot=True)
+    elif pick == "xiaomi":
+        config.vault.delete("__xiaomi_cloud__")
+        prompts.success("Xiaomi cloud account removed.", with_mascot=True)
 
     return None
 
@@ -411,42 +463,67 @@ def _tuya_import(config: ConfigManager) -> str | None:
     )
     from iotcli.core.device import slugify
 
-    # Show setup instructions
-    console.print()
-    from rich.panel import Panel
-    console.print(Panel(
-        SETUP_STEPS,
-        title="[bold cyan]Tuya IoT Platform Setup[/bold cyan]",
-        subtitle="[dim]iot.tuya.com[/dim]",
-        border_style="cyan",
-        expand=False,
-        padding=(1, 2),
-    ))
-    console.print()
+    # Check for saved cloud account
+    saved = config.vault.load("__tuya_cloud__")
+    api_key = saved.get("api_key", "")
+    api_secret = saved.get("api_secret", "")
+    region = saved.get("region", "")
 
-    # Get credentials
-    try:
-        api_key = prompts.text("API Key (Access ID)")
-    except KeyboardInterrupt:
-        return "__back__"
+    if api_key and api_secret and region:
+        region_label = TUYA_REGIONS.get(region, region)
+        use_saved = animated_select(
+            title="Tuya Cloud Account",
+            choices=[
+                (f"Use saved account (API Key: {api_key[:6]}…, region: {region_label})", "saved"),
+                ("Enter new credentials", "new"),
+            ],
+            subtitle="A saved Tuya account was found",
+        )
+        if use_saved is None:
+            return "__back__"
+        if use_saved == "saved":
+            # Skip credential prompts, go straight to fetch
+            pass
+        else:
+            api_key = api_secret = region = ""
+
     if not api_key:
-        return "__back__"
+        # Show setup instructions
+        console.print()
+        from rich.panel import Panel
+        console.print(Panel(
+            SETUP_STEPS,
+            title="[bold cyan]Tuya IoT Platform Setup[/bold cyan]",
+            subtitle="[dim]iot.tuya.com[/dim]",
+            border_style="cyan",
+            expand=False,
+            padding=(1, 2),
+        ))
+        console.print()
 
-    try:
-        api_secret = prompts.secret("API Secret (Access Secret)")
-    except KeyboardInterrupt:
-        return "__back__"
-    if not api_secret:
-        return "__back__"
+        # Get credentials
+        try:
+            api_key = prompts.text("API Key (Access ID)")
+        except KeyboardInterrupt:
+            return "__back__"
+        if not api_key:
+            return "__back__"
 
-    # Pick region
-    region = animated_select(
-        title="Select your region",
-        choices=[(f"{code}  —  {name}", code) for code, name in TUYA_REGIONS.items()],
-        subtitle="This must match your Tuya IoT Platform project",
-    )
-    if region is None:
-        return "__back__"
+        try:
+            api_secret = prompts.secret("API Secret (Access Secret)")
+        except KeyboardInterrupt:
+            return "__back__"
+        if not api_secret:
+            return "__back__"
+
+    if not region:
+        region = animated_select(
+            title="Select your region",
+            choices=[(f"{code}  —  {name}", code) for code, name in TUYA_REGIONS.items()],
+            subtitle="This must match your Tuya IoT Platform project",
+        )
+        if region is None:
+            return "__back__"
 
     # Fetch devices from cloud
     console.print()
@@ -550,41 +627,66 @@ def _xiaomi_import(config: ConfigManager) -> str | None:
     )
     from iotcli.core.device import slugify
 
-    # Show setup instructions
-    console.print()
-    from rich.panel import Panel
-    console.print(Panel(
-        SETUP_STEPS,
-        title="[bold cyan]Xiaomi / Mi Home Import[/bold cyan]",
-        subtitle="[dim]Mi Home app credentials[/dim]",
-        border_style="cyan",
-        expand=False,
-        padding=(1, 2),
-    ))
-    console.print()
+    # Check for saved cloud account
+    saved = config.vault.load("__xiaomi_cloud__")
+    username = saved.get("username", "")
+    password = saved.get("password", "")
+    region = saved.get("region", "")
 
-    # Get credentials
-    try:
-        username = prompts.text("Mi Home username (email/phone)")
-    except KeyboardInterrupt:
-        return "__back__"
+    if username and password and region:
+        masked_user = username[:3] + "…" + username[-4:] if len(username) > 7 else username[:3] + "…"
+        region_label = XIAOMI_REGIONS.get(region, region)
+        use_saved = animated_select(
+            title="Xiaomi Cloud Account",
+            choices=[
+                (f"Use saved account ({masked_user}, region: {region_label})", "saved"),
+                ("Enter new credentials", "new"),
+            ],
+            subtitle="A saved Xiaomi account was found",
+        )
+        if use_saved is None:
+            return "__back__"
+        if use_saved == "saved":
+            pass
+        else:
+            username = password = region = ""
+
     if not username:
-        return "__back__"
-    try:
-        password = prompts.secret("Mi Home password")
-    except KeyboardInterrupt:
-        return "__back__"
-    if not password:
-        return "__back__"
+        # Show setup instructions
+        console.print()
+        from rich.panel import Panel
+        console.print(Panel(
+            SETUP_STEPS,
+            title="[bold cyan]Xiaomi / Mi Home Import[/bold cyan]",
+            subtitle="[dim]Mi Home app credentials[/dim]",
+            border_style="cyan",
+            expand=False,
+            padding=(1, 2),
+        ))
+        console.print()
 
-    # Pick region
-    region = animated_select(
-        title="Select your region",
-        choices=[(f"{code}  —  {name}", code) for code, name in XIAOMI_REGIONS.items()],
-        subtitle="This should match your Mi Home app region",
-    )
-    if region is None:
-        return "__back__"
+        # Get credentials
+        try:
+            username = prompts.text("Mi Home username (email/phone)")
+        except KeyboardInterrupt:
+            return "__back__"
+        if not username:
+            return "__back__"
+        try:
+            password = prompts.secret("Mi Home password")
+        except KeyboardInterrupt:
+            return "__back__"
+        if not password:
+            return "__back__"
+
+    if not region:
+        region = animated_select(
+            title="Select your region",
+            choices=[(f"{code}  —  {name}", code) for code, name in XIAOMI_REGIONS.items()],
+            subtitle="This should match your Mi Home app region",
+        )
+        if region is None:
+            return "__back__"
 
     # Captcha callback: show image path, ask for code
     def on_captcha(image_path: str) -> str:
@@ -668,5 +770,13 @@ def _xiaomi_import(config: ConfigManager) -> str | None:
 
     console.print()
     prompts.success(f"Done! Imported {imported} device(s).", with_mascot=True)
+
+    # Vault the cloud credentials for future use
+    config.vault.save("__xiaomi_cloud__", {
+        "username": username,
+        "password": password,
+        "region": region,
+    })
+    prompts.info("Cloud credentials saved (encrypted) for future imports.")
 
     return None
