@@ -1,7 +1,7 @@
 name: PR Auto-Labels
 
 on:
-  pull_request:
+  pull_request_target:
     types: [opened, synchronize, reopened, edited]
 
 permissions:
@@ -63,6 +63,23 @@ jobs:
             if (match) {
               const mapped = titleMap[match[1]];
               if (mapped) labels.add(mapped);
+            }
+
+            // Remove stale type labels that no longer apply
+            const allTypeLabels = [...new Set([...Object.values(branchMap), ...Object.values(titleMap)])];
+            const current = (await github.rest.issues.listLabelsOnIssue({
+              owner: context.repo.owner,
+              repo:  context.repo.repo,
+              issue_number: context.payload.pull_request.number,
+            })).data.map(l => l.name);
+
+            for (const old of current.filter(l => allTypeLabels.includes(l) && !labels.has(l))) {
+              await github.rest.issues.removeLabel({
+                owner: context.repo.owner,
+                repo:  context.repo.repo,
+                issue_number: context.payload.pull_request.number,
+                name: old,
+              });
             }
 
             if (labels.size > 0) {
