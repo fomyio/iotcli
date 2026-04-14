@@ -1,6 +1,7 @@
 ---
-name: iotcli-{{ device.name }}
+name: iotcli_{{ device.name | replace('-', '_') }}
 description: {{ description }}
+metadata: {{ metadata_json }}
 ---
 
 # {{ device.name }}
@@ -15,15 +16,17 @@ description: {{ description }}
 | Connection | {% if meta and meta.is_cloud %}Cloud (requires internet){% else %}Local network{% endif %} |
 | Capabilities | {% for c in capabilities %}`{{ c }}`{% if not loop.last %}, {% endif %}{% endfor %} |
 
-## How an agent should use this skill
+## What This Skill Does
 
-All commands MUST use the `--json` flag to get machine-readable output. Always check
-status before issuing a control command — the device may be offline.
+Controls the `{{ device.name }}` device via the `iotcli` CLI. Supports status queries,
+power control, and property updates. All commands use `--json` for machine-readable output.
 
-### Query status
-```bash
-iotcli --json control status "{{ device.name }}"
-```
+## Process
+
+1. **List devices** — run `iotcli --json list` to confirm the device slug and online state.
+2. **Query status** — run `iotcli --json control status "{{ device.name }}"` before acting.
+3. **Act** — issue the control command (power, set, trigger).
+4. **Verify** — re-query status to confirm the change took effect.
 
 ### Power control
 ```bash
@@ -37,7 +40,7 @@ iotcli --json control off "{{ device.name }}"
 {% endif %}
 
 {% if settable_names %}
-### Settable properties
+## Settable Properties
 
 | Property | Type | Allowed values | Description |
 |---|---|---|---|
@@ -53,7 +56,7 @@ iotcli --json control set "{{ device.name }}" "{{ p.name }}={% if p.example is n
 {% endif %}
 
 {% if trigger_names %}
-### Triggers (no value)
+## Triggers
 
 These properties are *commands* — they accept no value and the CLI passes `true`.
 
@@ -66,14 +69,14 @@ These properties are *commands* — they accept no value and the CLI passes `tru
 {% endif %}
 
 {% if actions %}
-### High-level actions
+## High-Level Actions
 
 {% for action_name, action_desc in actions.items() %}
 - **{{ action_name }}** — {{ action_desc }}
 {% endfor %}
 {% endif %}
 
-### Status fields
+## Status Fields
 
 When you run `iotcli --json control status "{{ device.name }}"`, expect these fields:
 
