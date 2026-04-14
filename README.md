@@ -88,10 +88,38 @@ iotcli skills generate
 # Files created in ~/.iotcli/skills/:
 #   iotcli.skill.yaml     — global tool spec with all devices
 #   system_prompt.md      — ready-to-use agent system prompt
-#   <device>.skill.md     — per-device capability doc
+#   <device>/SKILL.md     — per-device capability doc
+#   iotcli.tools.json     — OpenAI/Anthropic tool schema
 ```
 
-### Agent Workflow
+### MCP Server (Claude Desktop / Cursor / Zed)
+
+iotcli ships an MCP server so Claude can control your devices directly in conversation — no copy-pasting commands.
+
+```bash
+# Install with MCP support
+pip install iotcli[mcp]
+
+# Start the server (Claude Desktop launches this for you)
+iotcli serve mcp
+```
+
+Add to your Claude Desktop config (`claude_desktop_config.json`):
+
+```json
+{
+  "mcpServers": {
+    "iotcli": {
+      "command": "iotcli",
+      "args": ["serve", "mcp"]
+    }
+  }
+}
+```
+
+Once connected, Claude can list devices, check status, turn them on/off, and set properties — all through structured tool calls with per-device enums and value validation.
+
+### Agent Workflow (CLI)
 
 ```bash
 # 1. Discover what's available

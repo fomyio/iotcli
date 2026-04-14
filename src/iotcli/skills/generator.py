@@ -44,6 +44,91 @@ def _infer_miio_profile(device: Device) -> str:
     return "generic"
 
 
+def build_device_context(device: Device) -> dict[str, Any]:
+    """Build a per-device metadata dict enriched with profile-aware properties.
+
+    This is the single source of truth for "what does this device look like to
+    the outside world" — it powers both the skill generator (per-device SKILL.md
+    + iotcli.tools.json) and the MCP server (per-device tool schemas). Keeping
+    one builder means an agent calling iotcli over MCP and an agent reading the
+    generated skill files see exactly the same property/range/enum data.
+
+    Returns a dict with: device, meta, profile_name, capabilities, properties
+    (list[Property]), status_properties (list[Property]), settable_names,
+    trigger_names, actions (dict[str, str]).
+    """
+    cls = protocol_registry.get(device.protocol)
+    meta = cls.meta if cls and hasattr(cls, "meta") else None
+
+    capabilities = list(meta.capabilities) if meta else ["on", "off", "status", "set"]
+    properties: list[Property] = []
+    status_properties: list[Property] = []
+    actions: dict[str, str] = {}
+    profile_name: str | None = device.profile
+
+    # Tuya / petfeeder profile enrichment
+    if device.protocol in ("tuya", "petfeeder"):
+        try:
+            from iotcli.protocols.tuya import TUYA_PROFILES
+
+            profile_name = device.profile or (
+                "petfeeder" if device.protocol == "petfeeder" else "generic"
+            )
+            profile_cls = TUYA_PROFILES.get(profile_name)
+            if profile_cls:
+                profile = profile_cls()
+                properties = list(profile.properties)
+                status_properties = list(profile.status_properties)
+                actions = dict(profile.actions)
+        except Exception:
+            pass
+
+    # miIO profile enrichment
+    elif device.protocol == "miio":
+        try:
+            from iotcli.protocols.miio import MIIO_PROFILES
+
+            profile_name = _infer_miio_profile(device)
+            profile_cls = MIIO_PROFILES.get(profile_name, MIIO_PROFILES["generic"])
+            profile = profile_cls()
+            properties = list(profile.properties)
+            status_properties = list(profile.status_properties)
+        except Exception:
+            pass
+
+    # Fall back to protocol-level rich properties (lgac, http, mqtt)
+    if not properties and meta and meta.properties:
+        properties = list(meta.properties)
+    if not status_properties and meta and meta.status_properties:
+        status_properties = list(meta.status_properties)
+
+    # Last-resort fallback: synthesize bare Property stubs from settable_properties
+    if not properties and meta:
+        properties = [Property(name=p, type="str") for p in meta.settable_properties]
+    if not status_properties:
+        status_properties = [
+            Property(name="online", type="bool", settable=False),
+            Property(name="power", type="str", settable=False),
+        ]
+
+    # Filter out trigger props from "settable property names" (they're invoked
+    # without a value via on/off or as bare actions).
+    settable_names = [p.name for p in properties if p.settable and p.type != "trigger"]
+    trigger_names = [p.name for p in properties if p.type == "trigger"]
+
+    return {
+        "device": device,
+        "meta": meta,
+        "profile_name": profile_name,
+        "capabilities": capabilities,
+        "properties": properties,
+        "status_properties": status_properties,
+        "settable_names": settable_names,
+        "trigger_names": trigger_names,
+        "actions": actions,
+    }
+
+
 class SkillGenerator:
     """Generates AI agent skill files for configured devices."""
 
@@ -129,77 +214,11 @@ class SkillGenerator:
 
     def _device_context(self, device: Device) -> dict[str, Any]:
         """Build template context for a device, enriched with profile metadata."""
-        cls = protocol_registry.get(device.protocol)
-        meta = cls.meta if cls and hasattr(cls, "meta") else None
-
-        capabilities = list(meta.capabilities) if meta else ["on", "off", "status", "set"]
-        properties: list[Property] = []
-        status_properties: list[Property] = []
-        actions: dict[str, str] = {}
-        profile_name: str | None = device.profile
-
-        # Tuya / petfeeder profile enrichment
-        if device.protocol in ("tuya", "petfeeder"):
-            try:
-                from iotcli.protocols.tuya import TUYA_PROFILES
-
-                profile_name = device.profile or (
-                    "petfeeder" if device.protocol == "petfeeder" else "generic"
-                )
-                profile_cls = TUYA_PROFILES.get(profile_name)
-                if profile_cls:
-                    profile = profile_cls()
-                    properties = list(profile.properties)
-                    status_properties = list(profile.status_properties)
-                    actions = dict(profile.actions)
-            except Exception:
-                pass
-
-        # miIO profile enrichment (NEW — was missing before)
-        elif device.protocol == "miio":
-            try:
-                from iotcli.protocols.miio import MIIO_PROFILES
-
-                profile_name = _infer_miio_profile(device)
-                profile_cls = MIIO_PROFILES.get(profile_name, MIIO_PROFILES["generic"])
-                profile = profile_cls()
-                properties = list(profile.properties)
-                status_properties = list(profile.status_properties)
-            except Exception:
-                pass
-
-        # Fall back to protocol-level rich properties (lgac, http, mqtt)
-        if not properties and meta and meta.properties:
-            properties = list(meta.properties)
-        if not status_properties and meta and meta.status_properties:
-            status_properties = list(meta.status_properties)
-
-        # Last-resort fallback: synthesize bare Property stubs from settable_properties
-        if not properties and meta:
-            properties = [Property(name=p, type="str") for p in meta.settable_properties]
-        if not status_properties:
-            status_properties = [
-                Property(name="online", type="bool", settable=False),
-                Property(name="power", type="str", settable=False),
-            ]
-
-        # Filter out trigger props from "settable property names" (they're invoked
-        # without a value via on/off or as bare actions).
-        settable_names = [p.name for p in properties if p.settable and p.type != "trigger"]
-        trigger_names = [p.name for p in properties if p.type == "trigger"]
-
-        return {
-            "device": device,
-            "meta": meta,
-            "profile_name": profile_name,
-            "capabilities": capabilities,
-            "properties": properties,
-            "status_properties": status_properties,
-            "settable_names": settable_names,
-            "trigger_names": trigger_names,
-            "actions": actions,
-            "description": self._build_description(device, profile_name, meta),
-        }
+        ctx = build_device_context(device)
+        ctx["description"] = self._build_description(
+            device, ctx["profile_name"], ctx["meta"],
+        )
+        return ctx
 
     def _build_description(
         self, device: Device, profile_name: str | None, meta: Any
