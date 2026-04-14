@@ -9,6 +9,7 @@ server.
 
 from __future__ import annotations
 
+import asyncio
 import json
 from typing import Any
 
@@ -51,6 +52,12 @@ def list_tools(cfg: ConfigManager) -> list[types.Tool]:
     if all_props:
         property_param["enum"] = all_props
 
+    # Each tool that accepts a `device` argument gets its own copy of
+    # device_param so a downstream mutation by the mcp SDK cannot corrupt the
+    # other tools' schemas.
+    def _dp() -> dict:
+        return dict(device_param)
+
     return [
         types.Tool(
             name="iotcli_list_devices",
@@ -65,7 +72,7 @@ def list_tools(cfg: ConfigManager) -> list[types.Tool]:
             description="Query the live status of a single device.",
             inputSchema={
                 "type": "object",
-                "properties": {"device": device_param},
+                "properties": {"device": _dp()},
                 "required": ["device"],
             },
         ),
@@ -81,7 +88,7 @@ def list_tools(cfg: ConfigManager) -> list[types.Tool]:
             ),
             inputSchema={
                 "type": "object",
-                "properties": {"device": device_param},
+                "properties": {"device": _dp()},
                 "required": ["device"],
             },
         ),
@@ -90,7 +97,7 @@ def list_tools(cfg: ConfigManager) -> list[types.Tool]:
             description="Turn a device off. No-op for pet feeders.",
             inputSchema={
                 "type": "object",
-                "properties": {"device": device_param},
+                "properties": {"device": _dp()},
                 "required": ["device"],
             },
         ),
@@ -104,7 +111,7 @@ def list_tools(cfg: ConfigManager) -> list[types.Tool]:
             inputSchema={
                 "type": "object",
                 "properties": {
-                    "device": device_param,
+                    "device": _dp(),
                     "property": property_param,
                     "value": {
                         "description": (
@@ -165,14 +172,16 @@ async def handle_tool(
         if not device:
             return _err_response(f"Device not found: {arguments.get('device')}")
         try:
-            status = ctrl.get_status(device)
+            status = await asyncio.to_thread(ctrl.get_status, device)
             return _ok_response({"device": device.name, **status})
         except Exception as e:
             return _err_response(str(e))
 
     if name == "iotcli_status_all":
         devices = cfg.get_all_devices()
-        results = ctrl.status_all(devices)
+        # status_all uses a ThreadPoolExecutor internally — wrap the blocking
+        # call so the event loop stays free during the parallel fan-out.
+        results = await asyncio.to_thread(ctrl.status_all, devices)
         return _ok_response({"devices": results})
 
     if name == "iotcli_turn_on":
@@ -180,7 +189,7 @@ async def handle_tool(
         if not device:
             return _err_response(f"Device not found: {arguments.get('device')}")
         try:
-            ok = ctrl.turn_on(device)
+            ok = await asyncio.to_thread(ctrl.turn_on, device)
             if ok:
                 return _ok_response({"success": True, "device": device.name, "action": "on"})
             return _err_response(f"Failed to turn on {device.name}")
@@ -192,7 +201,7 @@ async def handle_tool(
         if not device:
             return _err_response(f"Device not found: {arguments.get('device')}")
         try:
-            ok = ctrl.turn_off(device)
+            ok = await asyncio.to_thread(ctrl.turn_off, device)
             if ok:
                 return _ok_response({"success": True, "device": device.name, "action": "off"})
             return _err_response(f"Failed to turn off {device.name}")
@@ -208,7 +217,7 @@ async def handle_tool(
         if not prop:
             return _err_response("Missing 'property' argument")
         try:
-            ok = ctrl.set_value(device, prop, value)
+            ok = await asyncio.to_thread(ctrl.set_value, device, prop, value)
             if ok:
                 return _ok_response({
                     "success": True,
