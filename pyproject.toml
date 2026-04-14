@@ -42,6 +42,7 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = ["pytest>=7.0", "pytest-cov", "ruff"]
+mcp = ["mcp>=1.0.0"]
 
 [project.scripts]
 iotcli = "iotcli.cli.app:main"

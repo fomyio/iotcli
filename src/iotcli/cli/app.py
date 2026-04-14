@@ -17,6 +17,7 @@ from iotcli.cli.commands.control import control
 from iotcli.cli.commands.device import add, remove, list_devices, status_all
 from iotcli.cli.commands.config import config_show
 from iotcli.cli.commands.skills import skills
+from iotcli.cli.commands.serve import serve
 
 
 @click.group(invoke_without_command=True)
@@ -67,6 +68,7 @@ cli.add_command(status_all)
 cli.add_command(control)
 cli.add_command(config_show)
 cli.add_command(skills)
+cli.add_command(serve)
 
 
 # Interactive wizard — separate because it needs TUI
