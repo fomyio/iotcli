@@ -325,8 +325,7 @@ class SkillGenerator:
 
         return f"{proto} '{device.name}' {location} — {action_str}.{note}"
 
-    @staticmethod
-    def _build_pitfalls(profile_name: str | None) -> list[str]:
+    def _build_pitfalls(self, profile_name: str | None, properties: list) -> list[str]:
         """Return a list of agent-facing pitfall warnings for this device profile."""
         return list(_PROFILE_PITFALLS.get(profile_name or "", []))
 
