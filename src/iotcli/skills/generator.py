@@ -25,7 +25,7 @@ from iotcli.protocols.base import Property
 from iotcli.skills.engine import render
 
 
-def _build_openclaw_metadata(device: Device, meta: Any) -> str:  # noqa: ARG001
+def _build_openclaw_metadata(device: Device) -> str:
     """Return a compact JSON string with OpenClaw metadata for the skill frontmatter."""
     return json.dumps(
         {"openclaw": {"requires": {"bins": ["iotcli"]}, "os": ["darwin", "linux", "win32"]}},
@@ -135,7 +135,7 @@ def build_device_context(device: Device) -> dict[str, Any]:
         "trigger_names": trigger_names,
         "actions": actions,
         "skill_name": device.name.replace("-", "_"),
-        "metadata_json": _build_openclaw_metadata(device, meta),
+        "metadata_json": _build_openclaw_metadata(device),
     }
 
 
