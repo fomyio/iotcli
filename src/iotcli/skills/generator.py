@@ -1,12 +1,19 @@
 """Skill generator — creates AI-readable skill files from device config + protocol metadata.
 
-Outputs three things into the skills directory:
+Always writes per-device skill directories:
 
-1. `skills/<device-slug>/SKILL.md` — a Claude-Skills-compatible per-device skill (one
-   directory per device, frontmatter `name`/`description` so agent loaders can pick it up).
-2. `skills/iotcli.tools.json` — an OpenAI/Anthropic-compatible tool schema describing the
-   `iotcli` CLI as a structured tool, with proper enums, ranges, and types per device.
-3. `skills/system_prompt.md` — a human-readable summary of every device.
+- `skills/<device-slug>/SKILL.md` — an OpenClaw-compatible per-device skill (one directory
+  per device, frontmatter `name`/`description`/`metadata` so agent loaders can pick it up).
+
+When writing to the canonical default directory (`~/.iotcli/skills/`) three additional
+admin/back-compat files are also emitted:
+
+- `skills/iotcli.tools.json` — OpenAI/Anthropic-compatible tool schema for the iotcli CLI.
+- `skills/iotcli.skill.yaml` — legacy global skill YAML kept for back-compat.
+- `skills/system_prompt.md` — human-readable device summary for raw system-prompt injection.
+
+These flat files are intentionally skipped when ``--output-dir`` points elsewhere (e.g.
+``~/.claude/skills``) so that agent skill loaders only see proper per-device skill dirs.
 
 Devices are enriched with profile metadata (Tuya + miIO have profile registries) so each
 device gets *its own* property list rather than a generic protocol-level fallback.
@@ -150,7 +157,12 @@ class SkillGenerator:
     # -- public API -----------------------------------------------------------
 
     def generate_all(self, output_dir: str | None = None) -> list[str]:
-        """Generate skill files for all devices + tools.json + system prompt.
+        """Generate per-device SKILL.md dirs for all configured devices.
+
+        When ``output_dir`` is omitted (or matches the canonical ``~/.iotcli/skills/``
+        default), the admin files ``iotcli.tools.json``, ``iotcli.skill.yaml``, and
+        ``system_prompt.md`` are also written. They are skipped for external output
+        directories to avoid polluting agent skill loaders with non-skill files.
 
         Cleans stale per-device skill directories whose device no longer exists.
         """
