@@ -150,9 +150,8 @@ def build_device_context(device: Device) -> dict[str, Any]:
 # Keep these short — they appear in the agent's skill-selection context.
 _PROFILE_DESCRIPTION_NOTES: dict[str, str] = {
     "petfeeder": " Use `set portions=N` to feed — `on` only triggers one quick portion.",
-    "light": " Use `set brightness` / `set color_temp` for fine control, not just on/off.",
-    "bulb": " Use `set brightness` / `set color_temp` for fine control, not just on/off.",
-    "airfryer": " Requires both `temperature` and `timer` to start a cooking session.",
+    "light": " Use `set brightness` / `set color_temperature` for fine control, not just on/off.",
+    "bulb": " Use `set brightness` / `set color_temperature` for fine control, not just on/off.",
 }
 
 # Per-profile pitfall bullets shown in the ## Agent Guidance section.
