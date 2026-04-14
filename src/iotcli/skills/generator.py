@@ -174,17 +174,19 @@ class SkillGenerator:
         is_default_dir = out.resolve() == self.skills_dir.resolve()
         self._cleanup_stale(out, live_slugs, purge_legacy=is_default_dir)
 
-        # Tool schema (OpenAI/Anthropic tool spec)
-        path = self._write_tools_json(devices, out)
-        results.append(str(path))
+        # Flat admin files (tools.json, skill.yaml, system_prompt.md) are only
+        # written into the canonical skills dir. When the user points --output
+        # at an external location (e.g. ~/.claude/skills) we skip them so they
+        # don't pollute the agent's skill loader with non-skill files.
+        if is_default_dir:
+            path = self._write_tools_json(devices, out)
+            results.append(str(path))
 
-        # Global YAML (kept for back-compat with previous releases)
-        path = self._write_global_skill(devices, out)
-        results.append(str(path))
+            path = self._write_global_skill(devices, out)
+            results.append(str(path))
 
-        # System prompt
-        path = self._write_system_prompt(devices, out)
-        results.append(str(path))
+            path = self._write_system_prompt(devices, out)
+            results.append(str(path))
 
         return results
 
