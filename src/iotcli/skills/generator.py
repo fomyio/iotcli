@@ -25,6 +25,14 @@ from iotcli.protocols.base import Property
 from iotcli.skills.engine import render
 
 
+def _build_openclaw_metadata(device: Device) -> str:
+    """Return a compact JSON string with OpenClaw metadata for the skill frontmatter."""
+    return json.dumps(
+        {"openclaw": {"requires": {"bins": ["iotcli"]}, "os": ["darwin", "linux", "win32"]}},
+        separators=(",", ":"),
+    )
+
+
 # Heuristic: infer a miIO profile from a device name when the user hasn't set one.
 _MIIO_NAME_HINTS: list[tuple[tuple[str, ...], str]] = [
     (("airfryer", "air-fryer", "fryer"), "airfryer"),
@@ -126,6 +134,8 @@ def build_device_context(device: Device) -> dict[str, Any]:
         "settable_names": settable_names,
         "trigger_names": trigger_names,
         "actions": actions,
+        "skill_name": device.name.replace("-", "_"),
+        "metadata_json": _build_openclaw_metadata(device),
     }
 
 
