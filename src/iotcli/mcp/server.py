@@ -70,6 +70,7 @@ async def run_stdio(cfg: ConfigManager | None = None) -> None:
     """Launch the MCP server on stdin/stdout."""
     server = create_server(cfg)
     init_options = server.create_initialization_options()
+    logger.info("iotcli MCP server starting (stdio)")
     async with stdio_server() as (read_stream, write_stream):
         await server.run(read_stream, write_stream, init_options)
 

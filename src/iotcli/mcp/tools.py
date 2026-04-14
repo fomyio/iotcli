@@ -20,13 +20,10 @@ from iotcli.core.device import Device
 from iotcli.skills.generator import build_device_context
 
 
-def _device_enum(cfg: ConfigManager) -> list[str]:
-    return sorted(cfg.device_names())
-
-
 def list_tools(cfg: ConfigManager) -> list[types.Tool]:
     """Return the set of MCP tools, with per-device enums baked in."""
-    device_names = _device_enum(cfg)
+    devices = cfg.get_all_devices()
+    device_names = sorted(devices.keys())
 
     device_param = {
         "type": "string",
@@ -35,20 +32,13 @@ def list_tools(cfg: ConfigManager) -> list[types.Tool]:
     if device_names:
         device_param["enum"] = device_names
 
-    # Build per-device settable property info for the set tool description
-    set_desc_parts = [
-        "Set a property on a device. The allowed (property, value) pairs "
-        "depend on the device — read the iotcli://device/<name> resource for "
-        "the full schema before calling."
-    ]
-
-    # Build per-device property enums for the property parameter
+    # Build a union of all settable property names across every device so the
+    # property parameter carries a useful enum. Per-device constraints are in
+    # the iotcli://device/<name> resource — agents should read that before
+    # calling set_property.
     all_settable: set[str] = set()
     all_triggers: set[str] = set()
-    for name in device_names:
-        dev = cfg.get_device_or_none(name)
-        if not dev:
-            continue
+    for dev in devices.values():
         ctx = build_device_context(dev)
         all_settable.update(ctx["settable_names"])
         all_triggers.update(ctx["trigger_names"])
@@ -106,7 +96,11 @@ def list_tools(cfg: ConfigManager) -> list[types.Tool]:
         ),
         types.Tool(
             name="iotcli_set_property",
-            description="\n".join(set_desc_parts),
+            description=(
+                "Set a property on a device. The allowed (property, value) pairs "
+                "depend on the device — read the iotcli://device/<name> resource for "
+                "the full schema before calling."
+            ),
             inputSchema={
                 "type": "object",
                 "properties": {
