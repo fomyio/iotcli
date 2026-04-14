@@ -146,6 +146,36 @@ def build_device_context(device: Device) -> dict[str, Any]:
     }
 
 
+# Per-profile one-liners appended to the frontmatter description.
+# Keep these short — they appear in the agent's skill-selection context.
+_PROFILE_DESCRIPTION_NOTES: dict[str, str] = {
+    "petfeeder": " Use `set portions=N` to feed — `on` only triggers one quick portion.",
+    "light": " Use `set brightness` / `set color_temp` for fine control, not just on/off.",
+    "bulb": " Use `set brightness` / `set color_temp` for fine control, not just on/off.",
+    "airfryer": " Requires both `temperature` and `timer` to start a cooking session.",
+}
+
+# Per-profile pitfall bullets shown in the ## Agent Guidance section.
+_PROFILE_PITFALLS: dict[str, list[str]] = {
+    "petfeeder": [
+        "`on` triggers exactly **one quick portion** — it does NOT let you choose the amount.",
+        "To dispense a specific amount use `set \"portions=N\"` (N = 1–10). This is the correct command for scheduled or on-demand feeding.",
+        "`off` has no meaningful effect on a pet feeder — the device has no off state.",
+        "Always query status first to check `food_level` before feeding — dispense may fail silently if the hopper is empty.",
+    ],
+    "airfryer": [
+        "Setting only `temperature` without `timer` (or vice-versa) will not start cooking.",
+        "Check `status` after issuing a cook command — the appliance may reject the combination if the basket is not inserted.",
+    ],
+    "light": [
+        "Sending `on` without setting `brightness` may restore the last brightness, which could be 0% — always set brightness explicitly after turning on.",
+    ],
+    "bulb": [
+        "Sending `on` without setting `brightness` may restore the last brightness, which could be 0% — always set brightness explicitly after turning on.",
+    ],
+}
+
+
 class SkillGenerator:
     """Generates AI agent skill files for configured devices."""
 
@@ -240,25 +270,66 @@ class SkillGenerator:
         """Build template context for a device, enriched with profile metadata."""
         ctx = build_device_context(device)
         ctx["description"] = self._build_description(
-            device, ctx["profile_name"], ctx["meta"],
+            device, ctx["profile_name"], ctx["meta"], ctx["properties"],
+            ctx["trigger_names"], ctx["actions"],
         )
+        ctx["pitfalls"] = self._build_pitfalls(ctx["profile_name"], ctx["properties"])
         return ctx
 
     def _build_description(
-        self, device: Device, profile_name: str | None, meta: Any
+        self,
+        device: Device,
+        profile_name: str | None,
+        meta: Any,
+        properties: list,
+        trigger_names: list[str],
+        actions: dict[str, str],
     ) -> str:
-        """Build the SKILL.md `description` field that agents use to decide invocation."""
+        """Build a concise, action-oriented description for the skill frontmatter.
+
+        The description is the primary signal agents use to decide whether to invoke
+        this skill — it should name concrete actions and key property ranges, not just
+        say "control the device".
+        """
         proto = meta.display_name if meta else device.protocol
-        if profile_name and profile_name != "generic":
-            return (
-                f"Control the {device.name} ({profile_name}) — a {proto} device at "
-                f"{device.ip}. Use this skill to query status, turn on/off, and set "
-                f"device-specific properties via the iotcli CLI."
-            )
-        return (
-            f"Control the {device.name} — a {proto} device at {device.ip}. "
-            f"Use this skill to query status, turn on/off, and set properties via the iotcli CLI."
-        )
+        location = f"at {device.ip}" if device.ip and device.ip != "0.0.0.0" else "(cloud)"
+
+        # Build a compact list of what the agent can actually do.
+        action_parts: list[str] = []
+
+        settable = [p for p in properties if p.settable and p.type != "trigger"]
+        for p in settable[:4]:
+            if p.enum:
+                vals = "/".join(str(v) for v in p.enum[:4])
+                if len(p.enum) > 4:
+                    vals += "/…"
+                action_parts.append(f"set {p.name} ({vals})")
+            elif p.minimum is not None and p.maximum is not None:
+                unit = f" {p.unit}" if p.unit else ""
+                action_parts.append(f"set {p.name} ({p.minimum}–{p.maximum}{unit})")
+            else:
+                action_parts.append(f"set {p.name}")
+
+        for name in trigger_names[:2]:
+            action_parts.append(f"trigger {name}")
+
+        for name in list(actions.keys())[:2]:
+            action_parts.append(name)
+
+        if not action_parts:
+            action_parts = ["turn on/off", "query status"]
+
+        action_str = "; ".join(action_parts)
+
+        # Profile-specific clarification to prevent common agent mistakes.
+        note = _PROFILE_DESCRIPTION_NOTES.get(profile_name or "", "")
+
+        return f"{proto} '{device.name}' {location} — {action_str}.{note}"
+
+    @staticmethod
+    def _build_pitfalls(profile_name: str | None, properties: list) -> list[str]:
+        """Return a list of agent-facing pitfall warnings for this device profile."""
+        return list(_PROFILE_PITFALLS.get(profile_name or "", []))
 
     def _write_device_skill(self, device: Device, out_dir: Path) -> Path:
         ctx = self._device_context(device)

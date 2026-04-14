@@ -14,12 +14,32 @@ metadata: {{ metadata_json }}
 {% endif %}
 | Address | `{{ device.ip }}:{{ device.port }}` |
 | Connection | {% if meta and meta.is_cloud %}Cloud (requires internet){% else %}Local network{% endif %} |
-| Capabilities | {% for c in capabilities %}`{{ c }}`{% if not loop.last %}, {% endif %}{% endfor %} |
 
 ## What This Skill Does
 
-Controls the `{{ device.name }}` device via the `iotcli` CLI. Supports status queries,
-power control, and property updates. All commands use `--json` for machine-readable output.
+Use this skill to:
+
+- **Check device state** — is it on, offline, what are the current settings?
+{% if settable_names %}
+- **Change settings** — {{ settable_names | join(", ") }}
+{% endif %}
+{% if trigger_names %}
+- **Trigger commands** — {{ trigger_names | join(", ") }}
+{% endif %}
+{% if actions %}
+- **Run high-level actions** — {{ actions.keys() | join(", ") }}
+{% endif %}
+- **Turn on / off** the device{% if device.protocol in ("tuya", "petfeeder") and profile_name == "petfeeder" %} (on = one quick portion — see Agent Guidance below){% endif %}
+
+{% if pitfalls %}
+## Agent Guidance
+
+> These are common mistakes — read before issuing commands.
+
+{% for p in pitfalls %}
+- {{ p }}
+{% endfor %}
+{% endif %}
 
 ## Process
 
@@ -33,11 +53,6 @@ power control, and property updates. All commands use `--json` for machine-reada
 iotcli --json control on "{{ device.name }}"
 iotcli --json control off "{{ device.name }}"
 ```
-{% if device.protocol in ("tuya", "petfeeder") and profile_name == "petfeeder" %}
-
-> **Pet feeder note:** `on` triggers a single quick feed (1 portion). There is no
-> meaningful `off` state. Use `set ... "portions=N"` to dispense N portions.
-{% endif %}
 
 {% if settable_names %}
 ## Settable Properties
