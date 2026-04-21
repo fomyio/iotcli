@@ -11,6 +11,8 @@ from __future__ import annotations
 import json
 import pytest
 
+pytest.importorskip("mcp")
+
 from iotcli.config.manager import ConfigManager
 from iotcli.core.device import Device, DeviceStatus
 from iotcli.mcp.tools import list_tools, handle_tool
