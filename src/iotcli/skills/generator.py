@@ -159,7 +159,6 @@ _PROFILE_PITFALLS: dict[str, list[str]] = {
     "petfeeder": [
         "`on` triggers exactly **one quick portion** — it does NOT let you choose the amount.",
         "To dispense a specific amount use `set \"portions=N\"` (N = 1–10). This is the correct command for scheduled or on-demand feeding.",
-        "To dispense a specific amount use `set \"portions=N\"` (N = 1–60). This is the correct command for scheduled or on-demand feeding.",
         "Always query status first to check `food_level` before feeding — dispense may fail silently if the hopper is empty.",
     ],
     "airfryer": [

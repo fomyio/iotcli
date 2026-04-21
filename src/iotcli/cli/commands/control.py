@@ -37,11 +37,12 @@ def control(ctx, action, device_name, value):
     """Control a device: on, off, status, set property=value."""
     out = Output(ctx.obj["json_output"])
     cfg: ConfigManager = ctx.obj["config"]
-    ctrl = DeviceController(verbose=ctx.obj["verbose"], debug=ctx.obj["debug"])
 
     device = cfg.get_device_or_none(device_name)
     if not device:
         out.error(f"Device not found: {device_name}")
+
+    ctrl = DeviceController(verbose=ctx.obj["verbose"], debug=ctx.obj["debug"])
 
     try:
         if action == "on":
