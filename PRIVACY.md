@@ -26,7 +26,7 @@ No project maintainer, server, or third party (other than the device vendor you 
 When you use iotcli to communicate with a device, data is transmitted directly between your machine and the device or its vendor cloud (e.g., Tuya cloud, LG ThinQ). This communication is:
 
 - **Initiated by you** via explicit CLI commands.
-- ** Governed by the device vendor's privacy policy**, not this one.
+- **Governed by the device vendor's privacy policy**, not this one.
 
 We do not act as an intermediary, proxy, or data processor for these communications.
 
