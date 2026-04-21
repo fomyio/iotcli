@@ -1,6 +1,6 @@
-# iotcli
 
 <p align="center">
+  <img width="125" height="125" alt="image" src="https://github.com/user-attachments/assets/5b41e814-1108-4765-9c53-035140ec1eee" />
   <b>Give your AI agent hands.</b><br>
   One CLI to rule them all. Discover, configure, and control IoT devices across protocols.<br>
   Built for AI agents, loved by humans.
