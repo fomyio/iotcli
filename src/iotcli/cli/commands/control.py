@@ -39,9 +39,10 @@ def control(ctx, action, device_name, value):
     cfg: ConfigManager = ctx.obj["config"]
 
     device = cfg.get_device_or_none(device_name)
+    device = cfg.get_device_or_none(device_name)
     if not device:
         out.error(f"Device not found: {device_name}")
-
+        return
     ctrl = DeviceController(verbose=ctx.obj["verbose"], debug=ctx.obj["debug"])
 
     try:
