@@ -7,7 +7,6 @@ on:
 
 jobs:
   build-and-publish:
-    if: github.actor == 'joeVenner'
     runs-on: ubuntu-latest
     environment: pypi
     permissions:
