@@ -299,7 +299,7 @@ class MiIOProtocol(BaseProtocol):
             return False
         except Exception as e:
             if self.debug:
-                logging.getLogger(__name__).debug(f"miIO connect error: {e}")
+                print(f"miIO connect error: {e}")
             return False
 
     def disconnect(self) -> None:
