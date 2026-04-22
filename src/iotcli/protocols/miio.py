@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import socket
 import struct
 import time
@@ -296,7 +297,9 @@ class MiIOProtocol(BaseProtocol):
                 self._device_ts = ts
                 return True
             return False
-        except Exception:
+        except Exception as e:
+            if self.debug:
+                logging.getLogger(__name__).debug(f"miIO connect error: {e}")
             return False
 
     def disconnect(self) -> None:

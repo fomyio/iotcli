@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import base64
 import json
+import logging
 from typing import Any
 
 import tinytuya
@@ -296,7 +297,9 @@ class TuyaProtocol(BaseProtocol):
                 version=self.version,
             )
             return True
-        except Exception:
+        except Exception as e:
+            if self.debug:
+                logging.getLogger(__name__).debug(f"Tuya connect error: {e}")
             return False
 
     def disconnect(self) -> None:
