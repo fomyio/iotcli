@@ -48,8 +48,8 @@ mcp = ["mcp>=1.0.0,<2.0.0"]
 iotcli = "iotcli.cli.app:main"
 
 [project.urls]
-Homepage = "https://github.com/iotviaai/iotcli"
-Issues = "https://github.com/iotviaai/iotcli/issues"
+Homepage = "https://github.com/fomyio/iotcli"
+Issues = "https://github.com/fomyio/iotcli/issues"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/iotcli"]
