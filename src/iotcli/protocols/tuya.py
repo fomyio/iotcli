@@ -299,7 +299,7 @@ class TuyaProtocol(BaseProtocol):
             return True
         except Exception as e:
             if self.debug:
-                logging.getLogger(__name__).debug(f"Tuya connect error: {e}")
+                print(f"Tuya connect error: {e}")
             return False
 
     def disconnect(self) -> None:
