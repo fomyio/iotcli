@@ -26,7 +26,7 @@ No project maintainer, server, or third party (other than the device vendor you 
 When you use iotcli to communicate with a device, data is transmitted directly between your machine and the device or its vendor cloud (e.g., Tuya cloud, LG ThinQ). This communication is:
 
 - **Initiated by you** via explicit CLI commands.
-- ** Governed by the device vendor's privacy policy**, not this one.
+- **Governed by the device vendor's privacy policy**, not this one.
 
 We do not act as an intermediary, proxy, or data processor for these communications.
 
@@ -47,7 +47,7 @@ iotcli does not:
 
 ## 6. Open Source
 
-The full source code is available at https://github.com/fomyio/iotcli. You can inspect exactly what the tool does and how it handles data.
+The full source code is available at https://github.com/iotviaai/iotcli. You can inspect exactly what the tool does and how it handles data.
 
 ## 7. Changes to This Policy
 
@@ -55,4 +55,4 @@ We may update this policy to reflect changes in the software. The latest version
 
 ## 8. Contact
 
-For privacy questions, open an issue at https://github.com/fomyio/iotcli/issues.
+For privacy questions, open an issue at https://github.com/iotviaai/iotcli/issues.

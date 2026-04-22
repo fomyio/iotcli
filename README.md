@@ -1,6 +1,6 @@
-# iotcli
 
 <p align="center">
+  <img width="125" height="125" alt="image" src="https://github.com/user-attachments/assets/5b41e814-1108-4765-9c53-035140ec1eee" />
   <b>Give your AI agent hands.</b><br>
   One CLI to rule them all. Discover, configure, and control IoT devices across protocols.<br>
   Built for AI agents, loved by humans.
@@ -9,8 +9,8 @@
 <p align="center">
   <a href="https://pypi.org/project/iotcli/"><img src="https://img.shields.io/pypi/v/iotcli?style=flat-square&color=blue" alt="PyPI version"></a>
   <a href="https://pypi.org/project/iotcli/"><img src="https://img.shields.io/pypi/pyversions/iotcli?style=flat-square" alt="Python versions"></a>
-  <a href="https://github.com/fomyio/iotcli/actions"><img src="https://img.shields.io/github/actions/workflow/status/fomyio/iotcli/ci.yml?style=flat-square&logo=github" alt="CI"></a>
-  <a href="https://codecov.io/gh/fomyio/iotcli"><img src="https://img.shields.io/codecov/c/github/fomyio/iotcli?style=flat-square&logo=codecov" alt="Coverage"></a>
+  <a href="https://github.com/iotviaai/iotcli/actions"><img src="https://img.shields.io/github/actions/workflow/status/iotviaai/iotcli/ci.yml?style=flat-square&logo=github" alt="CI"></a>
+  <a href="https://codecov.io/gh/iotviaai/iotcli"><img src="https://img.shields.io/codecov/c/github/iotviaai/iotcli?style=flat-square&logo=codecov" alt="Coverage"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-green?style=flat-square" alt="License"></a>
   <a href="PRIVACY.md"><img src="https://img.shields.io/badge/privacy-local%20only-success?style=flat-square" alt="Privacy"></a>
 </p>
@@ -39,13 +39,13 @@ iotcli is a universal IoT device control CLI. It unifies smart-home devices behi
 
 ```bash
 # Global install via pipx (recommended — no venv needed)
-pipx install git+https://github.com/fomyio/iotcli.git
+pipx install git+https://github.com/iotviaai/iotcli.git
 
 # Or with MCP support for Claude Desktop / Cursor
-pipx install git+https://github.com/fomyio/iotcli.git[mcp]
+pipx install git+https://github.com/iotviaai/iotcli.git[mcp]
 
 # From source
-git clone https://github.com/fomyio/iotcli.git
+git clone https://github.com/iotviaai/iotcli.git
 cd iotcli
 pip install -e ".[dev]"
 ```
